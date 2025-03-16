@@ -1083,15 +1083,15 @@ class LLMReader {
         
         // Get the assessment URL from the server
         $.ajax({
-            url: '/api/assessment-url',
+            url: '/api/config',
             type: 'GET',
             success: (response) => {
-                if (response.url) {
+                if (response.assessmentUrl) {
                     // Encode the text for URL
                     const encodedText = encodeURIComponent(this.extractedText);
                     
                     // Open the assessment URL in a new tab
-                    const assessmentUrl = `${response.url}${encodedText}`;
+                    const assessmentUrl = `${response.assessmentUrl}${encodedText}`;
                     window.open(assessmentUrl, '_blank');
                     
                     // Send metrics to server if tracking is enabled
