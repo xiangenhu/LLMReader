@@ -1074,12 +1074,18 @@ class LLMReader {
         });
     }
     
-    // Open the assessment URL with the selected text
+    // Open the assessment URL with the processed text and language parameter
     openAssessment() {
         if (!this.extractedText || this.extractedText.trim().length === 0) {
             alert('Please select text to assess');
             return;
         }
+        
+        // Get the processed text from the UI
+        const processedText = $('#processed-text').text() || this.extractedText;
+        
+        // Get the selected language
+        const language = $('#language').val();
         
         // Get the assessment URL from the server
         $.ajax({
@@ -1087,18 +1093,19 @@ class LLMReader {
             type: 'GET',
             success: (response) => {
                 if (response.assessmentUrl) {
-                    // Encode the text for URL
-                    const encodedText = encodeURIComponent(this.extractedText);
+                    // Encode the processed text for URL
+                    const encodedText = encodeURIComponent(processedText);
                     
-                    // Open the assessment URL in a new tab
-                    const assessmentUrl = `${response.assessmentUrl}${encodedText}`;
+                    // Open the assessment URL in a new tab with language parameter
+                    const assessmentUrl = `${response.assessmentUrl}${encodedText}&lang=${language}`;
                     window.open(assessmentUrl, '_blank');
                     
                     // Send metrics to server if tracking is enabled
                     if ($('#track-metrics').is(':checked')) {
                         this.sendMetricsToServer({
                             action: 'assessment',
-                            text: this.extractedText.substring(0, 100) + '...'
+                            text: processedText.substring(0, 100) + '...',
+                            language: language
                         });
                     }
                 } else {
