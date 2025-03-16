@@ -157,6 +157,11 @@ class LLMReader {
             this.processExtractedText();
         });
         
+        // Assessment button
+        $('#assessment-button').on('click', () => {
+            this.openAssessment();
+        });
+        
         // Document iframe click handler
         $('#document-iframe').on('load', () => {
             this.setupIframeInteractions();
@@ -1066,6 +1071,44 @@ class LLMReader {
             reader.onload = () => resolve(reader.result);
             reader.onerror = reject;
             reader.readAsText(file);
+        });
+    }
+    
+    // Open the assessment URL with the selected text
+    openAssessment() {
+        if (!this.extractedText || this.extractedText.trim().length === 0) {
+            alert('Please select text to assess');
+            return;
+        }
+        
+        // Get the assessment URL from the server
+        $.ajax({
+            url: '/api/assessment-url',
+            type: 'GET',
+            success: (response) => {
+                if (response.url) {
+                    // Encode the text for URL
+                    const encodedText = encodeURIComponent(this.extractedText);
+                    
+                    // Open the assessment URL in a new tab
+                    const assessmentUrl = `${response.url}${encodedText}`;
+                    window.open(assessmentUrl, '_blank');
+                    
+                    // Send metrics to server if tracking is enabled
+                    if ($('#track-metrics').is(':checked')) {
+                        this.sendMetricsToServer({
+                            action: 'assessment',
+                            text: this.extractedText.substring(0, 100) + '...'
+                        });
+                    }
+                } else {
+                    alert('Assessment URL not configured');
+                }
+            },
+            error: (error) => {
+                console.error('Error getting assessment URL:', error);
+                alert('Error getting assessment URL');
+            }
         });
     }
 }
