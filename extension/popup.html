@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LLM Reader Extension</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <h1>LLM Reader</h1>
+    
+    <div class="settings-group">
+      <h3>Reading Preferences</h3>
+      <div class="form-group">
+        <label for="reading-level">Reading Level:</label>
+        <select id="reading-level" class="preference">
+          <option value="elementary">Elementary</option>
+          <option value="middle-school">Middle School</option>
+          <option value="high-school">High School</option>
+          <option value="college" selected>College</option>
+          <option value="graduate">Graduate</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="language">Language:</label>
+        <select id="language" class="preference">
+          <option value="original" selected>Original</option>
+          <option value="english">English</option>
+          <option value="spanish">Spanish</option>
+          <option value="french">French</option>
+          <option value="german">German</option>
+          <option value="chinese">Chinese</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="style">Style:</label>
+        <select id="style" class="preference">
+          <option value="original" selected>Original</option>
+          <option value="simple">Simple</option>
+          <option value="academic">Academic</option>
+          <option value="conversational">Conversational</option>
+          <option value="technical">Technical</option>
+          <option value="witty">Witty</option>
+          <option value="informative">Informative</option>
+          <option value="concise">Concise</option>
+          <option value="storytelling">Storytelling</option>
+          <option value="professional">Professional</option>
+        </select>
+      </div>
+    </div>
+    
+    <div class="settings-group">
+      <h3>LLM Settings</h3>
+      <div class="form-group">
+        <label for="provider">Provider:</label>
+        <select id="provider">
+          <option value="openai" selected>OpenAI</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="google">Google</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="model">Model:</label>
+        <select id="model">
+          <option value="gpt-4">GPT-4</option>
+          <option value="gpt-3.5-turbo" selected>GPT-3.5 Turbo</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="api-key">API Key:</label>
+        <input type="password" id="api-key" placeholder="Enter your API key">
+      </div>
+    </div>
+    
+    <div class="settings-group">
+      <h3>Display Options</h3>
+      <div class="form-group checkbox">
+        <input type="checkbox" id="auto-process" checked>
+        <label for="auto-process">Auto-process selected text</label>
+      </div>
+      <div class="form-group checkbox">
+        <input type="checkbox" id="show-iframe" checked>
+        <label for="show-iframe">Show content in iframe</label>
+      </div>
+      <div class="form-group checkbox">
+        <input type="checkbox" id="expand-context" checked>
+        <label for="expand-context">Expand to include full paragraphs</label>
+        <div class="help-text">When enabled, the extension will automatically expand your selection to include the entire paragraph</div>
+      </div>
+      <div class="form-group checkbox">
+        <input type="checkbox" id="text-only">
+        <label for="text-only">Extract text only</label>
+        <div class="help-text">When enabled, ignores buttons, images, and other non-text elements</div>
+      </div>
+      <div class="form-group checkbox">
+        <input type="checkbox" id="dim-unread">
+        <label for="dim-unread">Dim unread text</label>
+        <div class="help-text">When enabled, dims text until it's clicked and read</div>
+      </div>
+      <div class="form-group checkbox">
+        <input type="checkbox" id="enable-assessment">
+        <label for="enable-assessment">Enable SPL Assessment</label>
+        <div class="help-text">When enabled, sends text to SPL assessment tool</div>
+      </div>
+    </div>
+    
+    <div class="button-group">
+      <button id="save-settings" class="btn primary">Save Settings</button>
+      <button id="reset-settings" class="btn secondary">Reset</button>
+    </div>
+    
+    <div class="status-message" id="status-message"></div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>

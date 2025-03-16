@@ -1,0 +1,109 @@
+/* LLM Reader Extension Content Styles */
+
+/* Prevent conflicts with page styles */
+.llm-reader-iframe-container,
+.llm-reader-processing-overlay,
+.llm-reader-header,
+.llm-reader-tabs,
+.llm-reader-tab,
+.llm-reader-content,
+.llm-reader-original-content,
+.llm-reader-processed-content,
+.llm-reader-spinner {
+  font-family: Arial, sans-serif !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  color: #333 !important;
+  box-sizing: border-box !important;
+}
+
+/* Selection highlight */
+::selection {
+  background-color: rgba(76, 175, 80, 0.3) !important;
+}
+
+/* Processing overlay animation */
+@keyframes llm-reader-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Tooltip for auto-process */
+.llm-reader-tooltip {
+  position: absolute;
+  background-color: #333;
+  color: white;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  z-index: 10001;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.llm-reader-tooltip.visible {
+  opacity: 1;
+}
+
+.llm-reader-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -5px;
+  border-width: 5px;
+  border-style: solid;
+  border-color: #333 transparent transparent transparent;
+}
+
+/* PDF viewer styles */
+.llm-reader-pdf-container {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.llm-reader-pdf-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+/* Button styles */
+.llm-reader-button {
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  margin: 5px;
+  transition: background-color 0.2s;
+}
+
+.llm-reader-button:hover {
+  background-color: #45a049;
+}
+
+.llm-reader-button.secondary {
+  background-color: #2196F3;
+}
+
+.llm-reader-button.secondary:hover {
+  background-color: #0b7dda;
+}
+
+/* Responsive adjustments for small screens */
+@media (max-width: 768px) {
+  .llm-reader-iframe-container {
+    width: 80% !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .llm-reader-iframe-container {
+    width: 100% !important;
+  }
+}

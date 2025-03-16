@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LLM Reader PDF Viewer</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+      background-color: #f5f5f5;
+    }
+    
+    #pdf-container {
+      width: 100%;
+      height: 100vh;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 0;
+    }
+    
+    .pdf-page {
+      position: relative;
+      margin-bottom: 20px;
+      background-color: white;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+    
+    .text-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      color: transparent;
+      pointer-events: none;
+    }
+    
+    .paragraph {
+      position: relative;
+      background-color: rgba(255, 255, 255, 0.8);
+      padding: 5px;
+      margin: 5px;
+      border-radius: 3px;
+      cursor: pointer;
+      color: black;
+      pointer-events: auto;
+    }
+    
+    .paragraph:hover {
+      background-color: rgba(76, 175, 80, 0.2);
+    }
+    
+    .paragraph-actions {
+      display: none;
+      position: absolute;
+      right: 10px;
+      top: 10px;
+    }
+    
+    .paragraph:hover .paragraph-actions {
+      display: block;
+    }
+    
+    .btn {
+      padding: 5px 10px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      margin-right: 5px;
+      font-size: 12px;
+    }
+    
+    .btn:hover {
+      background-color: #45a049;
+    }
+    
+    .btn-secondary {
+      background-color: #2196F3;
+    }
+    
+    .btn-secondary:hover {
+      background-color: #0b7dda;
+    }
+    
+    #toolbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      background-color: #333;
+      color: white;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px;
+      z-index: 100;
+    }
+    
+    #page-controls {
+      display: flex;
+      align-items: center;
+    }
+    
+    #page-num {
+      margin: 0 10px;
+    }
+    
+    #zoom-controls {
+      display: flex;
+      align-items: center;
+    }
+    
+    .toolbar-btn {
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 0 5px;
+    }
+    
+    .toolbar-btn:hover {
+      color: #4CAF50;
+    }
+    
+    #loading {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(255, 255, 255, 0.8);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 5px solid #f3f3f3;
+      border-top: 5px solid #3498db;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div id="loading">
+    <div class="spinner"></div>
+  </div>
+  
+  <div id="toolbar">
+    <div id="page-controls">
+      <button id="prev-page" class="toolbar-btn">◀</button>
+      <span id="page-num">Page 1 of 1</span>
+      <button id="next-page" class="toolbar-btn">▶</button>
+    </div>
+    <div id="zoom-controls">
+      <button id="zoom-out" class="toolbar-btn">−</button>
+      <span id="zoom-level">100%</span>
+      <button id="zoom-in" class="toolbar-btn">+</button>
+    </div>
+  </div>
+  
+  <div id="pdf-container"></div>
+  
+  <script>
+    // Initialize PDF.js
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    
+    // Global variables
+    let pdfDoc = null;
+    let currentPage = 1;
+    let totalPages = 1;
+    let scale = 1.5;
+    let paragraphs = [];
+    
+    // Get URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const pdfUrl = urlParams.get('url');
+    
+    // Load PDF
+    if (pdfUrl) {
+      loadPdf(pdfUrl);
+    } else {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('pdf-container').innerHTML = '<p>No PDF URL provided</p>';
+    }
+    
+    // Event listeners
+    document.getElementById('prev-page').addEventListener('click', () => {
+      if (currentPage > 1) {
+        currentPage--;
+        renderPage(currentPage);
+      }
+    });
+    
+    document.getElementById('next-page').addEventListener('click', () => {
+      if (currentPage < totalPages) {
+        currentPage++;
+        renderPage(currentPage);
+      }
+    });
+    
+    document.getElementById('zoom-in').addEventListener('click', () => {
+      scale += 0.25;
+      renderPage(currentPage);
+      document.getElementById('zoom-level').textContent = `${Math.round(scale * 100)}%`;
+    });
+    
+    document.getElementById('zoom-out').addEventListener('click', () => {
+      if (scale > 0.5) {
+        scale -= 0.25;
+        renderPage(currentPage);
+        document.getElementById('zoom-level').textContent = `${Math.round(scale * 100)}%`;
+      }
+    });
+    
+    // Load PDF function
+    async function loadPdf(url) {
+      try {
+        // Load PDF document
+        pdfDoc = await pdfjsLib.getDocument(url).promise;
+        totalPages = pdfDoc.numPages;
+        
+        // Update UI
+        document.getElementById('page-num').textContent = `Page ${currentPage} of ${totalPages}`;
+        
+        // Render first page
+        renderPage(currentPage);
+        
+        // Hide loading spinner
+        document.getElementById('loading').style.display = 'none';
+      } catch (error) {
+        console.error('Error loading PDF:', error);
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('pdf-container').innerHTML = `<p>Error loading PDF: ${error.message}</p>`;
+      }
+    }
+    
+    // Render page function
+    async function renderPage(pageNumber) {
+      try {
+        // Show loading spinner
+        document.getElementById('loading').style.display = 'flex';
+        
+        // Get page
+        const page = await pdfDoc.getPage(pageNumber);
+        const viewport = page.getViewport({ scale });
+        
+        // Clear container
+        document.getElementById('pdf-container').innerHTML = '';
+        
+        // Create page div
+        const pageDiv = document.createElement('div');
+        pageDiv.className = 'pdf-page';
+        pageDiv.style.width = `${viewport.width}px`;
+        pageDiv.style.height = `${viewport.height}px`;
+        
+        // Create canvas
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        
+        // Render PDF page to canvas
+        const renderContext = {
+          canvasContext: context,
+          viewport: viewport
+        };
+        
+        await page.render(renderContext).promise;
+        
+        // Add canvas to page div
+        pageDiv.appendChild(canvas);
+        
+        // Get text content
+        const textContent = await page.getTextContent();
+        const textItems = textContent.items;
+        
+        // Create text layer div
+        const textLayerDiv = document.createElement('div');
+        textLayerDiv.className = 'text-layer';
+        
+        // Process text items to identify paragraphs
+        let currentParagraph = [];
+        let lastY = null;
+        
+        for (let i = 0; i < textItems.length; i++) {
+          const item = textItems[i];
+          
+          // Check if this is a new line/paragraph
+          if (lastY === null || Math.abs(item.transform[5] - lastY) > 12) {
+            // If we have text in the current paragraph, finish it
+            if (currentParagraph.length > 0) {
+              const paragraphText = currentParagraph.join(' ');
+              
+              // Only create paragraph divs for non-empty content
+              if (paragraphText.trim().length > 0) {
+                const paragraphDiv = createParagraphDiv(paragraphText, paragraphs.length);
+                textLayerDiv.appendChild(paragraphDiv);
+                paragraphs.push({
+                  text: paragraphText,
+                  element: paragraphDiv,
+                  page: pageNumber
+                });
+              }
+              
+              currentParagraph = [];
+            }
+          }
+          
+          currentParagraph.push(item.str);
+          lastY = item.transform[5];
+        }
+        
+        // Add the last paragraph if there's any text left
+        if (currentParagraph.length > 0) {
+          const paragraphText = currentParagraph.join(' ');
+          if (paragraphText.trim().length > 0) {
+            const paragraphDiv = createParagraphDiv(paragraphText, paragraphs.length);
+            textLayerDiv.appendChild(paragraphDiv);
+            paragraphs.push({
+              text: paragraphText,
+              element: paragraphDiv,
+              page: pageNumber
+            });
+          }
+        }
+        
+        pageDiv.appendChild(textLayerDiv);
+        document.getElementById('pdf-container').appendChild(pageDiv);
+        
+        // Update page number display
+        document.getElementById('page-num').textContent = `Page ${pageNumber} of ${totalPages}`;
+        
+        // Hide loading spinner
+        document.getElementById('loading').style.display = 'none';
+      } catch (error) {
+        console.error('Error rendering page:', error);
+        document.getElementById('loading').style.display = 'none';
+      }
+    }
+    
+    // Create paragraph div function
+    function createParagraphDiv(text, index) {
+      const paragraphId = `paragraph-${index}`;
+      const paragraphDiv = document.createElement('div');
+      paragraphDiv.className = 'paragraph';
+      paragraphDiv.id = paragraphId;
+      
+      // Add original text
+      const textDiv = document.createElement('div');
+      textDiv.className = 'paragraph-text';
+      textDiv.textContent = text;
+      
+      // Add action buttons
+      const actionsDiv = document.createElement('div');
+      actionsDiv.className = 'paragraph-actions';
+      
+      const processBtn = document.createElement('button');
+      processBtn.className = 'btn';
+      processBtn.textContent = 'Process';
+      processBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        processParagraph(paragraphId);
+      });
+      
+      actionsDiv.appendChild(processBtn);
+      
+      paragraphDiv.appendChild(textDiv);
+      paragraphDiv.appendChild(actionsDiv);
+      
+      // Add click event to process paragraph
+      paragraphDiv.addEventListener('click', () => {
+        processParagraph(paragraphId);
+      });
+      
+      return paragraphDiv;
+    }
+    
+    // Process paragraph function
+    function processParagraph(paragraphId) {
+      const index = parseInt(paragraphId.split('-')[1]);
+      const paragraph = paragraphs[index];
+      
+      if (!paragraph) return;
+      
+      // Send message to parent window
+      window.parent.postMessage({
+        action: 'processParagraph',
+        text: paragraph.text
+      }, '*');
+    }
+  </script>
+</body>
+</html>
