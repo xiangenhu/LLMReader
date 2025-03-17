@@ -1095,10 +1095,18 @@ class LLMReader {
                 if (response.assessmentUrl) {
                     // Encode the processed text for URL
                     const encodedText = encodeURIComponent(processedText);
-                    
+                    console.log(encodedText);
                     // Open the assessment URL in a new tab with language parameter
-                    const assessmentUrl = `${response.assessmentUrl}${encodedText}&lang=${language}`;
-                    window.open(assessmentUrl, '_blank');
+                    let theURLObj={
+                        wizard:"1",
+                        teacher:"0",
+                        DirectSPL:"1",
+                        DirectRequest:encodedText,
+                        lang:language
+                    }
+
+                    let GetURL = jsonToUrl(response.assessmentUrl,theURLObj);
+                    window.open(GetURL, '_blank');
                     
                     // Send metrics to server if tracking is enabled
                     if ($('#track-metrics').is(':checked')) {
@@ -1118,6 +1126,39 @@ class LLMReader {
             }
         });
     }
+}
+
+function urlToJson(url) {
+    let queryString = url.split('?')[1]; // Extract the query part
+    if (!queryString) return {}; // Return empty object if no query params
+    
+    return queryString.split('&').reduce((acc, param) => {
+        let [key, value] = param.split('=');
+        key = decodeURIComponent(key);
+        value = value ? decodeURIComponent(value) : '';
+
+        // Handle cases where multiple values exist for the same key
+        if (acc[key]) {
+            acc[key] = Array.isArray(acc[key]) ? [...acc[key], value] : [acc[key], value];
+        } else {
+            acc[key] = value;
+        }
+        return acc;
+    }, {});
+}
+
+function jsonToUrl(baseURL, json) {
+    const queryString = Object.keys(json)
+        .map(key => {
+            const value = json[key];
+            if (Array.isArray(value)) {
+                return value.map(val => `${encodeURIComponent(key)}=${encodeURIComponent(val)}`).join('&');
+            }
+            return `${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+        })
+        .join('&');
+    
+    return queryString ? `${baseURL}?${queryString}` : baseURL;
 }
 
 // Initialize the reader when the document is ready
