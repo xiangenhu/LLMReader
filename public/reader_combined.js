@@ -88,11 +88,22 @@ this.metrics = {
         $('input[name="file-type"]').on('change', (e) => {
             this.documentType = e.target.value;
             
-            // Update file input accept attribute
+            // Show the appropriate form based on document type
             if (this.documentType === 'pdf') {
-                $('#file-input').attr('accept', '.pdf');
-            } else {
-                $('#file-input').attr('accept', '.html,.htm');
+                $('#pdf-form').show();
+                $('#html-form').hide();
+                $('#chat-form').hide();
+                this.showDocumentInterface();
+            } else if (this.documentType === 'html') {
+                $('#pdf-form').hide();
+                $('#html-form').show();
+                $('#chat-form').hide();
+                this.showDocumentInterface();
+            } else if (this.documentType === 'chat') {
+                $('#pdf-form').hide();
+                $('#html-form').hide();
+                $('#chat-form').show();
+                this.showChatInterface();
             }
         });
         
@@ -1036,4 +1047,16 @@ updateMetricsDisplay() {
     if (this.metrics.speechActs !== undefined && this.metrics.speechActs.length > 0) {
         $('#speech-acts').text(this.metrics.speechActs.join(', '));
     }
+}
+
+// Show document interface (iframe)
+showDocumentInterface() {
+    $('#document-iframe').show();
+    $('#chat-container').hide();
+}
+
+// Show chat interface
+showChatInterface() {
+    $('#document-iframe').hide();
+    $('#chat-container').show();
 }
