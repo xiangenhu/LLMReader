@@ -12,7 +12,7 @@ const llmService = require('../services/llmService');
  */
 exports.processText = async (req, res) => {
   try {
-    const { text, readingLevel, language, style, model, startTime, stream = true } = req.body;
+    const { text, readingLevel, language, style, model, startTime, stream = true, sessionId } = req.body;
     
     if (!text) {
       return res.status(400).json({ error: 'Text is required' });
@@ -42,13 +42,30 @@ exports.processText = async (req, res) => {
           }
         };
         
-        fullText = await llmService.processText(text, readingLevel, language, style, model, true, onChunk);
+        const result = await llmService.processText(
+          text, 
+          readingLevel, 
+          language, 
+          style, 
+          model, 
+          true, 
+          onChunk, 
+          sessionId || `session-${Date.now()}`
+        );
+        
+        fullText = result.processedText;
         
         // Calculate latency
         const latency = Date.now() - startTime;
         
-        // Send completion event
-        res.write(`event: complete\ndata: ${JSON.stringify({ latency })}\n\n`);
+        // Send completion event with metrics
+        res.write(`event: complete\ndata: ${JSON.stringify({ 
+          latency,
+          promptTokens: result.metrics.promptTokens,
+          completionTokens: result.metrics.completionTokens,
+          totalTokens: result.metrics.totalTokens,
+          interPromptLatency: result.metrics.interPromptLatency
+        })}\n\n`);
       } catch (error) {
         console.error('Streaming error:', error);
         res.write(`event: error\ndata: ${JSON.stringify({ error: error.message })}\n\n`);
@@ -57,14 +74,27 @@ exports.processText = async (req, res) => {
       }
     } else {
       // Process with LLM without streaming
-      const processedText = await llmService.processText(text, readingLevel, language, style, model, false);
+      const result = await llmService.processText(
+        text, 
+        readingLevel, 
+        language, 
+        style, 
+        model, 
+        false, 
+        null, 
+        sessionId || `session-${Date.now()}`
+      );
       
       // Calculate latency
       const latency = Date.now() - startTime;
       
       res.json({ 
-        processedText,
-        latency
+        processedText: result.processedText,
+        latency,
+        promptTokens: result.metrics.promptTokens,
+        completionTokens: result.metrics.completionTokens,
+        totalTokens: result.metrics.totalTokens,
+        interPromptLatency: result.metrics.interPromptLatency
       });
     }
   } catch (error) {
@@ -81,22 +111,71 @@ exports.processText = async (req, res) => {
 };
 
 /**
+ * Process chat message with LLM
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+exports.processChat = async (req, res) => {
+  try {
+    const { message, conversation, model, provider, sessionId } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+    
+    if (!conversation || !Array.isArray(conversation)) {
+      return res.status(400).json({ error: 'Conversation history is required and must be an array' });
+    }
+    
+    // Process with LLM
+    const result = await llmService.processChat(
+      message,
+      conversation,
+      model || 'gpt-3.5-turbo',
+      provider,
+      sessionId || `session-${Date.now()}`
+    );
+    
+    res.json({
+      message: result.message,
+      promptTokens: result.metrics.promptTokens,
+      completionTokens: result.metrics.completionTokens,
+      totalTokens: result.metrics.totalTokens,
+      interPromptLatency: result.metrics.interPromptLatency
+    });
+  } catch (error) {
+    console.error('Error in processChat controller:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+/**
  * Assess text with LLM
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
 exports.assessText = async (req, res) => {
   try {
-    const { text, model } = req.body;
+    const { text, model, sessionId } = req.body;
     
     if (!text) {
       return res.status(400).json({ error: 'Text is required' });
     }
     
     // Get assessment from LLM
-    const assessment = await llmService.assessText(text, model);
+    const result = await llmService.assessText(
+      text, 
+      model, 
+      sessionId || `session-${Date.now()}`
+    );
     
-    res.json({ assessment });
+    res.json({ 
+      assessment: result.assessment,
+      promptTokens: result.metrics.promptTokens,
+      completionTokens: result.metrics.completionTokens,
+      totalTokens: result.metrics.totalTokens,
+      interPromptLatency: result.metrics.interPromptLatency
+    });
   } catch (error) {
     console.error('Error in assessText controller:', error.message);
     res.status(500).json({ error: error.message });

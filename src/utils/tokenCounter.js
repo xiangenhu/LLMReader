@@ -1,0 +1,128 @@
+/**
+ * Token Counter Utility
+ * Provides functions to count tokens for different LLM providers
+ */
+
+const { Tiktoken } = require('js-tiktoken');
+
+// Cache for encoders to avoid recreating them
+const encoderCache = {};
+
+/**
+ * Count tokens for OpenAI models
+ * @param {string} text - The text to count tokens for
+ * @param {string} model - The model name
+ * @returns {number} - The token count
+ */
+function countOpenAITokens(text, model) {
+  try {
+    // Determine encoding based on model
+    let encoding = 'cl100k_base'; // Default for newer models
+    
+    if (model.includes('gpt-3.5-turbo')) {
+      encoding = 'cl100k_base';
+    } else if (model.includes('gpt-4')) {
+      encoding = 'cl100k_base';
+    } else if (model.includes('text-davinci')) {
+      encoding = 'p50k_base';
+    }
+    
+    // Get or create encoder
+    if (!encoderCache[encoding]) {
+      encoderCache[encoding] = new Tiktoken(encoding);
+    }
+    
+    const encoder = encoderCache[encoding];
+    const tokens = encoder.encode(text);
+    
+    return tokens.length;
+  } catch (error) {
+    console.error('Error counting OpenAI tokens:', error);
+    // Fallback to approximate count
+    return approximateTokenCount(text);
+  }
+}
+
+/**
+ * Count tokens for Claude models (approximation)
+ * @param {string} text - The text to count tokens for
+ * @returns {number} - The approximate token count
+ */
+function countClaudeTokens(text) {
+  // Claude uses a similar tokenizer to GPT models
+  // This is an approximation
+  try {
+    if (!encoderCache['cl100k_base']) {
+      encoderCache['cl100k_base'] = new Tiktoken('cl100k_base');
+    }
+    
+    const encoder = encoderCache['cl100k_base'];
+    const tokens = encoder.encode(text);
+    
+    return tokens.length;
+  } catch (error) {
+    console.error('Error counting Claude tokens:', error);
+    return approximateTokenCount(text);
+  }
+}
+
+/**
+ * Count tokens for Gemini models (approximation)
+ * @param {string} text - The text to count tokens for
+ * @returns {number} - The approximate token count
+ */
+function countGeminiTokens(text) {
+  // Gemini uses a different tokenizer, but this is a reasonable approximation
+  try {
+    if (!encoderCache['cl100k_base']) {
+      encoderCache['cl100k_base'] = new Tiktoken('cl100k_base');
+    }
+    
+    const encoder = encoderCache['cl100k_base'];
+    const tokens = encoder.encode(text);
+    
+    return tokens.length;
+  } catch (error) {
+    console.error('Error counting Gemini tokens:', error);
+    return approximateTokenCount(text);
+  }
+}
+
+/**
+ * Approximate token count based on word count
+ * @param {string} text - The text to count tokens for
+ * @returns {number} - The approximate token count
+ */
+function approximateTokenCount(text) {
+  // A very rough approximation: ~1.3 tokens per word
+  const words = text.split(/\s+/).length;
+  return Math.ceil(words * 1.3);
+}
+
+/**
+ * Count tokens based on provider
+ * @param {string} text - The text to count tokens for
+ * @param {string} provider - The provider (openai, anthropic, google)
+ * @param {string} model - The model name
+ * @returns {number} - The token count
+ */
+function countTokens(text, provider, model) {
+  switch (provider) {
+    case 'openai':
+      return countOpenAITokens(text, model);
+    case 'anthropic':
+      return countClaudeTokens(text);
+    case 'google':
+      return countGeminiTokens(text);
+    default:
+      return approximateTokenCount(text);
+  }
+}
+
+module.exports = {
+  countTokens,
+  countOpenAITokens,
+  countClaudeTokens,
+  countGeminiTokens,
+  approximateTokenCount
+};

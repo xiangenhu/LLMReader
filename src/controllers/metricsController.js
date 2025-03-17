@@ -44,6 +44,10 @@ exports.trackMetrics = async (req, res) => {
         extensions: {
           'http://example.com/llmreader/metrics': {
             latency: data.latency,
+            interPromptLatency: data.interPromptLatency || 0,
+            promptTokens: data.promptTokens || 0,
+            completionTokens: data.completionTokens || 0,
+            totalTokens: data.totalTokens || 0,
             readingLevel: data.readingLevel,
             language: data.language,
             style: data.style,

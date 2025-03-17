@@ -4,6 +4,82 @@
  */
 
 const axios = require('axios');
+const { countTokens } = require('../utils/tokenCounter');
+
+// Store the timestamp of the last prompt for each session
+const lastPromptTimestamps = new Map();
+
+/**
+ * Calculate lexical density of text
+ * @param {string} text - The text to analyze
+ * @returns {number} - The lexical density percentage
+ */
+function calculateLexicalDensity(text) {
+  // Remove punctuation and convert to lowercase
+  const cleanText = text.replace(/[^\w\s]/g, '').toLowerCase();
+  
+  // Split into words
+  const words = cleanText.split(/\s+/).filter(word => word.length > 0);
+  
+  // Count total words
+  const totalWords = words.length;
+  
+  // Define function words (common non-lexical words)
+  const functionWords = new Set([
+    'the', 'a', 'an', 'and', 'or', 'but', 'if', 'then', 'else', 'when',
+    'at', 'by', 'for', 'with', 'about', 'against', 'between', 'into', 'through',
+    'during', 'before', 'after', 'above', 'below', 'to', 'from', 'up', 'down',
+    'in', 'out', 'on', 'off', 'over', 'under', 'again', 'further', 'then',
+    'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any',
+    'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no',
+    'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very',
+    'can', 'will', 'just', 'should', 'now', 'of', 'as', 'be', 'is', 'are',
+    'was', 'were', 'am', 'been', 'being', 'have', 'has', 'had', 'having',
+    'do', 'does', 'did', 'doing', 'would', 'could', 'should', 'might', 'must',
+    'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them',
+    'my', 'your', 'his', 'its', 'our', 'their', 'mine', 'yours', 'hers', 'ours', 'theirs'
+  ]);
+  
+  // Count lexical words (non-function words)
+  const lexicalWords = words.filter(word => !functionWords.has(word));
+  const lexicalWordCount = lexicalWords.length;
+  
+  // Calculate lexical density
+  return totalWords > 0 ? Math.round((lexicalWordCount / totalWords) * 100) : 0;
+}
+
+/**
+ * Identify speech acts in text
+ * @param {string} text - The text to analyze
+ * @returns {Array<string>} - Array of identified speech acts
+ */
+function identifySpeechActs(text) {
+  const speechActs = [];
+  
+  // Define patterns for different speech acts
+  const patterns = [
+    { act: 'Question', regex: /\?|what|who|when|where|why|how|could you|can you|would you/i },
+    { act: 'Command/Request', regex: /please|kindly|would you|could you|can you|must|should|shall|do this|try to/i },
+    { act: 'Statement/Assertion', regex: /is|are|was|were|will be|has been|have been|there is|there are/i },
+    { act: 'Promise/Commitment', regex: /will|shall|going to|promise|commit|guarantee|ensure|pledge|vow/i },
+    { act: 'Expression/Exclamation', regex: /!|wow|oh|ah|ouch|great|excellent|amazing|wonderful|terrible|awful/i },
+    { act: 'Declaration', regex: /hereby|pronounce|declare|announce|proclaim/i }
+  ];
+  
+  // Check for each speech act pattern
+  for (const pattern of patterns) {
+    if (pattern.regex.test(text)) {
+      speechActs.push(pattern.act);
+    }
+  }
+  
+  // If no speech acts identified, default to Statement
+  if (speechActs.length === 0) {
+    speechActs.push('Statement');
+  }
+  
+  return [...new Set(speechActs)]; // Remove duplicates
+}
 
 /**
  * Process text with LLM based on user preferences
@@ -14,9 +90,10 @@ const axios = require('axios');
  * @param {string} model - The LLM model to use
  * @param {boolean} stream - Whether to stream the response
  * @param {function} onChunk - Callback for streaming chunks
- * @returns {Promise<string>} - The processed text (if not streaming)
+ * @param {string} sessionId - Unique identifier for the session
+ * @returns {Promise<Object>} - The processed text and metrics
  */
-exports.processText = async (text, readingLevel, language, style, model, stream = false, onChunk = null) => {
+exports.processText = async (text, readingLevel, language, style, model, stream = false, onChunk = null, sessionId = 'default') => {
   // Construct prompt based on user preferences
   let prompt = `Please rewrite the following text `;
   
@@ -46,8 +123,20 @@ exports.processText = async (text, readingLevel, language, style, model, stream 
     throw new Error(`Could not determine provider for model: ${model}`);
   }
   
+  // Calculate inter-prompt latency
+  const currentTime = Date.now();
+  const lastPromptTime = lastPromptTimestamps.get(sessionId);
+  const interPromptLatency = lastPromptTime ? currentTime - lastPromptTime : 0;
+  
+  // Update last prompt timestamp
+  lastPromptTimestamps.set(sessionId, currentTime);
+  
+  // Count tokens in prompt
+  const promptTokens = countTokens(prompt, provider, model);
+  
   // Call appropriate LLM API based on provider
   let processedText;
+  let completionTokens = 0;
   
   switch (provider) {
     case 'openai':
@@ -63,16 +152,154 @@ exports.processText = async (text, readingLevel, language, style, model, stream 
       throw new Error(`Unsupported provider: ${provider}`);
   }
   
-  return processedText;
+  // Count tokens in completion
+  if (typeof processedText === 'string') {
+    completionTokens = countTokens(processedText, provider, model);
+  }
+  
+  // Calculate lexical density for both original and processed text
+  const originalLexicalDensity = calculateLexicalDensity(text);
+  const processedLexicalDensity = calculateLexicalDensity(processedText);
+  
+  // Identify speech acts in both original and processed text
+  const originalSpeechActs = identifySpeechActs(text);
+  const processedSpeechActs = identifySpeechActs(processedText);
+  
+  // Return processed text and metrics
+  return {
+    processedText,
+    metrics: {
+      promptTokens,
+      completionTokens,
+      totalTokens: promptTokens + completionTokens,
+      interPromptLatency,
+      originalLexicalDensity,
+      processedLexicalDensity,
+      originalSpeechActs,
+      processedSpeechActs
+    }
+  };
+};
+
+/**
+ * Process chat message with LLM
+ * @param {string} message - The user's message
+ * @param {Array} conversation - The conversation history
+ * @param {string} model - The LLM model to use
+ * @param {string} provider - The LLM provider to use
+ * @param {string} sessionId - Unique identifier for the session
+ * @returns {Promise<Object>} - The response message and metrics
+ */
+exports.processChat = async (message, conversation, model, provider, sessionId = 'default') => {
+  // Determine provider based on model if not explicitly provided
+  if (!provider) {
+    if (model.startsWith('gpt-')) {
+      provider = 'openai';
+    } else if (model.startsWith('claude-')) {
+      provider = 'anthropic';
+    } else if (model.startsWith('gemini-')) {
+      provider = 'google';
+    } else {
+      throw new Error(`Could not determine provider for model: ${model}`);
+    }
+  }
+  
+  // Calculate inter-prompt latency
+  const currentTime = Date.now();
+  const lastPromptTime = lastPromptTimestamps.get(sessionId);
+  const interPromptLatency = lastPromptTime ? currentTime - lastPromptTime : 0;
+  
+  // Update last prompt timestamp
+  lastPromptTimestamps.set(sessionId, currentTime);
+  
+  // Format conversation for the LLM API
+  let formattedConversation;
+  let promptTokens = 0;
+  
+  // Call appropriate LLM API based on provider
+  let responseMessage;
+  let completionTokens = 0;
+  
+  switch (provider) {
+    case 'openai':
+      // Format conversation for OpenAI
+      formattedConversation = conversation.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+      
+      // Add system message if not present
+      if (!formattedConversation.some(msg => msg.role === 'system')) {
+        formattedConversation.unshift({
+          role: 'system',
+          content: 'You are a helpful assistant.'
+        });
+      }
+      
+      // Count tokens in prompt
+      promptTokens = countTokens(JSON.stringify(formattedConversation), provider, model);
+      
+      // Call OpenAI API
+      responseMessage = await callOpenAIChatAPI(formattedConversation, model);
+      break;
+      
+    case 'anthropic':
+      // Format conversation for Claude
+      formattedConversation = conversation.map(msg => ({
+        role: msg.role === 'assistant' ? 'assistant' : 'user',
+        content: msg.content
+      }));
+      
+      // Count tokens in prompt
+      promptTokens = countTokens(JSON.stringify(formattedConversation), provider, model);
+      
+      // Call Claude API
+      responseMessage = await callClaudeChatAPI(formattedConversation, model);
+      break;
+      
+    case 'google':
+      // Format conversation for Gemini
+      formattedConversation = conversation.map(msg => ({
+        role: msg.role,
+        parts: [{ text: msg.content }]
+      }));
+      
+      // Count tokens in prompt
+      promptTokens = countTokens(JSON.stringify(formattedConversation), provider, model);
+      
+      // Call Gemini API
+      responseMessage = await callGeminiChatAPI(formattedConversation, model);
+      break;
+      
+    default:
+      throw new Error(`Unsupported provider: ${provider}`);
+  }
+  
+  // Count tokens in completion
+  if (typeof responseMessage === 'string') {
+    completionTokens = countTokens(responseMessage, provider, model);
+  }
+  
+  // Return response and metrics
+  return {
+    message: responseMessage,
+    metrics: {
+      promptTokens,
+      completionTokens,
+      totalTokens: promptTokens + completionTokens,
+      interPromptLatency
+    }
+  };
 };
 
 /**
  * Get assessment of text from LLM
  * @param {string} text - The text to assess
  * @param {string} model - The LLM model to use
- * @returns {Promise<string>} - The assessment
+ * @param {string} sessionId - Unique identifier for the session
+ * @returns {Promise<Object>} - The assessment and metrics
  */
-exports.assessText = async (text, model) => {
+exports.assessText = async (text, model, sessionId = 'default') => {
   const prompt = `Please analyze the following text and provide a brief assessment of:
 1. Main topic and key points
 2. Reading difficulty level
@@ -94,8 +321,20 @@ ${text}`;
     throw new Error(`Could not determine provider for model: ${model}`);
   }
   
+  // Calculate inter-prompt latency
+  const currentTime = Date.now();
+  const lastPromptTime = lastPromptTimestamps.get(sessionId);
+  const interPromptLatency = lastPromptTime ? currentTime - lastPromptTime : 0;
+  
+  // Update last prompt timestamp
+  lastPromptTimestamps.set(sessionId, currentTime);
+  
+  // Count tokens in prompt
+  const promptTokens = countTokens(prompt, provider, model);
+  
   // Call appropriate LLM API based on provider
   let assessment;
+  let completionTokens = 0;
   
   switch (provider) {
     case 'openai':
@@ -111,7 +350,21 @@ ${text}`;
       throw new Error(`Unsupported provider: ${provider}`);
   }
   
-  return assessment;
+  // Count tokens in completion
+  if (typeof assessment === 'string') {
+    completionTokens = countTokens(assessment, provider, model);
+  }
+  
+  // Return assessment and metrics
+  return {
+    assessment,
+    metrics: {
+      promptTokens,
+      completionTokens,
+      totalTokens: promptTokens + completionTokens,
+      interPromptLatency
+    }
+  };
 };
 
 /**
@@ -285,6 +538,108 @@ async function callClaude(prompt, model = 'claude-3-sonnet-20240229', stream = f
   } catch (error) {
     console.error('Claude API error:', error.response?.data || error.message);
     throw new Error(`Claude API error: ${error.response?.data?.error?.message || error.message}`);
+  }
+}
+
+/**
+ * Call OpenAI Chat API
+ * @param {Array} conversation - The conversation history
+ * @param {string} model - The model to use
+ * @returns {Promise<string>} - The response text
+ */
+async function callOpenAIChatAPI(conversation, model) {
+  try {
+    const requestBody = {
+      model: model,
+      messages: conversation,
+      temperature: 0.7
+    };
+    
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+    };
+    
+    const response = await axios.post(
+      'https://api.openai.com/v1/chat/completions',
+      requestBody,
+      { headers }
+    );
+    
+    return response.data.choices[0].message.content;
+  } catch (error) {
+    console.error('OpenAI Chat API error:', error.response?.data || error.message);
+    throw new Error(`OpenAI Chat API error: ${error.response?.data?.error?.message || error.message}`);
+  }
+}
+
+/**
+ * Call Claude Chat API
+ * @param {Array} conversation - The conversation history
+ * @param {string} model - The model to use
+ * @returns {Promise<string>} - The response text
+ */
+async function callClaudeChatAPI(conversation, model) {
+  try {
+    // Map model names to actual Claude model identifiers
+    const modelMap = {
+      'claude-3-opus': 'claude-3-opus-20240229',
+      'claude-3-sonnet': 'claude-3-sonnet-20240229',
+      'claude-3-haiku': 'claude-3-haiku-20240307'
+    };
+    
+    const claudeModel = modelMap[model] || 'claude-3-sonnet-20240229';
+    
+    const requestBody = {
+      model: claudeModel,
+      max_tokens: 1000,
+      messages: conversation
+    };
+    
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.CLAUDE_API_KEY,
+      'anthropic-version': '2023-06-01'
+    };
+    
+    const response = await axios.post(
+      'https://api.anthropic.com/v1/messages',
+      requestBody,
+      { headers }
+    );
+    
+    return response.data.content[0].text;
+  } catch (error) {
+    console.error('Claude Chat API error:', error.response?.data || error.message);
+    throw new Error(`Claude Chat API error: ${error.response?.data?.error?.message || error.message}`);
+  }
+}
+
+/**
+ * Call Gemini Chat API
+ * @param {Array} conversation - The conversation history
+ * @param {string} model - The model to use
+ * @returns {Promise<string>} - The response text
+ */
+async function callGeminiChatAPI(conversation, model) {
+  try {
+    const requestBody = {
+      contents: conversation,
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 1000
+      }
+    };
+    
+    const response = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      requestBody
+    );
+    
+    return response.data.candidates[0].content.parts[0].text;
+  } catch (error) {
+    console.error('Gemini Chat API error:', error.response?.data || error.message);
+    throw new Error(`Gemini Chat API error: ${error.response?.data?.error?.message || error.message}`);
   }
 }
 

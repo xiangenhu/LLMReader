@@ -88,6 +88,7 @@ async processExtractedText() {
         if ($('#track-metrics').is(':checked')) {
             this.sendMetricsToServer({
                 action: 'processed',
+                paragraphId: `paragraph-${Date.now()}`, // Add a unique paragraphId
                 text: this.extractedText.substring(0, 100) + '...',
                 latency: latency,
                 readingLevel: readingLevel,

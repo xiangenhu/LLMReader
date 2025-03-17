@@ -10,6 +10,7 @@ const metricsController = require('../controllers/metricsController');
 
 // LLM routes
 router.post('/process', llmController.processText);
+router.post('/chat', llmController.processChat);
 router.post('/assess', llmController.assessText);
 
 // Metrics routes

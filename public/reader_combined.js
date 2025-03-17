@@ -19,10 +19,15 @@ class LLMReader {
         this.pdfData = null;
         this.extractedText = '';
         this.readParagraphs = new Set(); // Track read paragraphs
-        this.metrics = {
+this.metrics = {
             startTime: null,
             processingTimes: [],
-            paragraphsProcessed: 0
+            paragraphsProcessed: 0,
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0,
+            lexicalDensity: 0,
+            speechActs: []
         };
         
         this.initEventListeners();
@@ -937,18 +942,44 @@ async processExtractedText() {
         // Update metrics
         this.metrics.processingTimes.push(latency);
         this.metrics.paragraphsProcessed++;
+        
+        // Update token metrics if available
+        if (response.promptTokens) {
+            this.metrics.promptTokens += response.promptTokens;
+        }
+        if (response.completionTokens) {
+            this.metrics.completionTokens += response.completionTokens;
+        }
+        if (response.totalTokens) {
+            this.metrics.totalTokens += response.totalTokens;
+        }
+        
+        // Update lexical density and speech acts if available
+        if (response.originalLexicalDensity !== undefined) {
+            this.metrics.lexicalDensity = response.originalLexicalDensity;
+        }
+        if (response.originalSpeechActs !== undefined) {
+            this.metrics.speechActs = response.originalSpeechActs;
+        }
+        
         this.updateMetricsDisplay();
         
         // Send metrics to server if tracking is enabled
         if ($('#track-metrics').is(':checked')) {
             this.sendMetricsToServer({
                 action: 'processed',
+                paragraphId: `paragraph-${Date.now()}`, // Add a unique paragraphId
                 text: this.extractedText.substring(0, 100) + '...',
                 latency: latency,
                 readingLevel: readingLevel,
                 language: language,
                 style: style,
-                model: model
+                model: model,
+                promptTokens: this.metrics.promptTokens,
+                completionTokens: this.metrics.completionTokens,
+                totalTokens: this.metrics.totalTokens,
+                lexicalDensity: this.metrics.lexicalDensity,
+                speechActs: this.metrics.speechActs
             });
         }
         
@@ -989,5 +1020,20 @@ updateMetricsDisplay() {
     if (this.metrics.startTime) {
         const readingTime = Math.round((Date.now() - this.metrics.startTime) / 1000);
         $('#reading-time').text(readingTime);
+    }
+    
+    // Update token metrics
+    $('#prompt-tokens').text(this.metrics.promptTokens);
+    $('#completion-tokens').text(this.metrics.completionTokens);
+    $('#total-tokens').text(this.metrics.totalTokens);
+    
+    // Update lexical density if available
+    if (this.metrics.lexicalDensity !== undefined) {
+        $('#lexical-density').text(this.metrics.lexicalDensity);
+    }
+    
+    // Update speech acts if available
+    if (this.metrics.speechActs !== undefined && this.metrics.speechActs.length > 0) {
+        $('#speech-acts').text(this.metrics.speechActs.join(', '));
     }
 }
