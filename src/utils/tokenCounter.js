@@ -16,6 +16,15 @@ const encoderCache = {};
  */
 function countOpenAITokens(text, model) {
   try {
+    // Ensure text is a string
+    if (text === undefined || text === null) {
+      console.warn('Received undefined or null text in countOpenAITokens');
+      return 0;
+    }
+    
+    // Convert to string if not already
+    const textStr = String(text);
+    
     // Determine encoding based on model
     let encoding = 'cl100k_base'; // Default for newer models
     
@@ -33,7 +42,7 @@ function countOpenAITokens(text, model) {
     }
     
     const encoder = encoderCache[encoding];
-    const tokens = encoder.encode(text);
+    const tokens = encoder.encode(textStr);
     
     return tokens.length;
   } catch (error) {
@@ -52,12 +61,21 @@ function countClaudeTokens(text) {
   // Claude uses a similar tokenizer to GPT models
   // This is an approximation
   try {
+    // Ensure text is a string
+    if (text === undefined || text === null) {
+      console.warn('Received undefined or null text in countClaudeTokens');
+      return 0;
+    }
+    
+    // Convert to string if not already
+    const textStr = String(text);
+    
     if (!encoderCache['cl100k_base']) {
       encoderCache['cl100k_base'] = new Tiktoken('cl100k_base');
     }
     
     const encoder = encoderCache['cl100k_base'];
-    const tokens = encoder.encode(text);
+    const tokens = encoder.encode(textStr);
     
     return tokens.length;
   } catch (error) {
@@ -74,12 +92,21 @@ function countClaudeTokens(text) {
 function countGeminiTokens(text) {
   // Gemini uses a different tokenizer, but this is a reasonable approximation
   try {
+    // Ensure text is a string
+    if (text === undefined || text === null) {
+      console.warn('Received undefined or null text in countGeminiTokens');
+      return 0;
+    }
+    
+    // Convert to string if not already
+    const textStr = String(text);
+    
     if (!encoderCache['cl100k_base']) {
       encoderCache['cl100k_base'] = new Tiktoken('cl100k_base');
     }
     
     const encoder = encoderCache['cl100k_base'];
-    const tokens = encoder.encode(text);
+    const tokens = encoder.encode(textStr);
     
     return tokens.length;
   } catch (error) {
@@ -94,8 +121,17 @@ function countGeminiTokens(text) {
  * @returns {number} - The approximate token count
  */
 function approximateTokenCount(text) {
+  // Ensure text is a string
+  if (text === undefined || text === null) {
+    console.warn('Received undefined or null text in approximateTokenCount');
+    return 0;
+  }
+  
+  // Convert to string if not already
+  const textStr = String(text);
+  
   // A very rough approximation: ~1.3 tokens per word
-  const words = text.split(/\s+/).length;
+  const words = textStr.split(/\s+/).length;
   return Math.ceil(words * 1.3);
 }
 

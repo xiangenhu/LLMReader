@@ -14,7 +14,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
 class LLMReader {
     constructor() {
         this.currentDocument = null;
-        this.documentType = 'pdf'; // Default to PDF
+        this.documentType = 'chat'; // Default to Chat
         this.pdfUrl = null;
         this.pdfData = null;
         this.extractedText = '';
@@ -27,7 +27,8 @@ class LLMReader {
             completionTokens: 0,
             totalTokens: 0,
             lexicalDensity: 0,
-            speechActs: []
+            speechActs: [],
+            lastPromptTime: null // Track time of last prompt for latency calculation
         };
         
         // Initialize chat interface
@@ -35,61 +36,8 @@ class LLMReader {
         
         this.initEventListeners();
         
-        // Load default document on startup
-        this.loadDefaultDocument();
-    }
-    
-    /**
-     * Load a default document when the application starts
-     * First tries to load sample-document.html, then falls back to a URL if available
-     */
-    async loadDefaultDocument() {
-        try {
-            console.log('Loading default document...');
-            
-            // Try to load the sample HTML document first
-            const sampleHtmlPath = '/sample-document.html';
-            
-            try {
-                // Check if the sample HTML document exists
-                const response = await fetch(sampleHtmlPath, { method: 'HEAD' });
-                if (response.ok) {
-                    console.log('Sample HTML document found, loading...');
-                    this.fetchFromUrl(window.location.origin + sampleHtmlPath);
-                    return;
-                }
-            } catch (error) {
-                console.log('Sample HTML document not found, trying alternatives...');
-            }
-            
-            // Try to load a sample PDF if available
-            const samplePdfPath = '/sample-document.pdf';
-            
-            try {
-                const response = await fetch(samplePdfPath, { method: 'HEAD' });
-                if (response.ok) {
-                    console.log('Sample PDF document found, loading...');
-                    this.fetchFromUrl(window.location.origin + samplePdfPath);
-                    return;
-                }
-            } catch (error) {
-                console.log('Sample PDF document not found, trying alternatives...');
-            }
-            
-            // If no sample documents are found, check if there's a URL parameter
-            const urlParams = new URLSearchParams(window.location.search);
-            const documentUrl = urlParams.get('url');
-            
-            if (documentUrl) {
-                console.log('Loading document from URL parameter:', documentUrl);
-                this.fetchFromUrl(documentUrl);
-                return;
-            }
-            
-            console.log('No default document found. Please upload a document or enter a URL.');
-        } catch (error) {
-            console.error('Error loading default document:', error);
-        }
+        // Show chat interface by default
+        this.showChatInterface();
     }
     
     initEventListeners() {
@@ -111,56 +59,21 @@ class LLMReader {
             fileDropArea.removeClass('highlight');
             
             const file = e.originalEvent.dataTransfer.files[0];
-            if (file) {
-                this.loadDocument(file);
+            if (file && file.type === 'application/pdf') {
+                this.loadPdf(file);
             }
         });
         
         fileInput.on('change', (e) => {
             const file = e.target.files[0];
-            if (file) {
-                this.loadDocument(file);
+            if (file && file.type === 'application/pdf') {
+                this.loadPdf(file);
             }
         });
         
-        // PDF URL input
-        $('#fetch-url-btn').on('click', () => {
-            const url = $('#url-input').val().trim();
-            if (url) {
-                this.fetchFromUrl(url);
-            } else {
-                alert('Please enter a valid URL');
-            }
-        });
-        
-        // Enter key in PDF URL input
-        $('#url-input').on('keypress', (e) => {
-            if (e.which === 13) { // Enter key
-                const url = $('#url-input').val().trim();
-                if (url) {
-                    this.fetchFromUrl(url);
-                }
-            }
-        });
-        
-        // HTML URL input
-        $('#html-fetch-url-btn').on('click', () => {
-            const url = $('#html-url-input').val().trim();
-            if (url) {
-                this.fetchFromUrl(url);
-            } else {
-                alert('Please enter a valid URL');
-            }
-        });
-        
-        // Enter key in HTML URL input
-        $('#html-url-input').on('keypress', (e) => {
-            if (e.which === 13) { // Enter key
-                const url = $('#html-url-input').val().trim();
-                if (url) {
-                    this.fetchFromUrl(url);
-                }
-            }
+        // Close overlay button
+        $(document).on('click', '#close-overlay', () => {
+            $('#processing-overlay').hide();
         });
         
         // File type toggle
@@ -184,11 +97,6 @@ class LLMReader {
                 $('#chat-form').show();
                 this.showChatInterface();
             }
-        });
-        
-        // Close overlay button
-        $('#close-overlay').on('click', () => {
-            $('#processing-overlay').hide();
         });
         
         // Process button
@@ -232,264 +140,76 @@ class LLMReader {
         });
         
         // Initialize collapsible sections
-        $('.collapsible-header').on('click', function() {
+        this.initCollapsibleSections();
+    }
+    
+    initCollapsibleSections() {
+        // Add click handler for all collapsible headers
+        $(document).on('click', '.collapsible-header', function() {
             $(this).toggleClass('collapsed');
             $(this).closest('.collapsible').find('.collapsible-content').slideToggle(200);
         });
     }
     
+    showDocumentInterface() {
+        // Show document iframe, hide chat interface
+        $('#document-iframe').show();
+        $('#chat-container').hide();
+    }
+    
+    showChatInterface() {
+        // Hide document iframe, show chat interface
+        $('#document-iframe').hide();
+        $('#chat-container').show();
+        
+        // Initialize chat if not already done
+        if (!this.chat) {
+            this.chat = new LLMChat();
+        }
+    }
+    
     async loadDocument(file) {
         try {
-            // Only allow PDF files for upload
-            if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
-                alert('Only PDF files are supported for upload. For HTML content, please use the URL option.');
-                return;
-            }
+            // Create a URL for the PDF file
+            const pdfBlob = new Blob([await this.readFileAsArrayBuffer(file)], { type: 'application/pdf' });
+            this.pdfUrl = URL.createObjectURL(pdfBlob);
             
-            // Reset state
-            this.currentDocument = file;
-            this.documentType = 'pdf';
-            this.extractedText = '';
-            this.readParagraphs = new Set(); // Reset read paragraphs
+            // Load the PDF in the iframe
+            const iframe = document.getElementById('document-iframe');
+            iframe.src = this.pdfUrl;
             
-            // Update UI
-            $('#processed-count').text('0');
-            $('#total-count').text('0');
+            // Set up iframe load event
+            iframe.onload = () => {
+                this.setupIframeInteractions(iframe);
+                $(document).trigger('pdf-loaded');
+            };
             
             // Reset metrics
             this.metrics = {
                 startTime: Date.now(),
                 processingTimes: [],
-                paragraphsProcessed: 0,
-                promptTokens: 0,
-                completionTokens: 0,
-                totalTokens: 0,
-                lexicalDensity: 0,
-                speechActs: []
+                paragraphsProcessed: 0
             };
             
-            // For PDFs, we'll use PDF.js to render in a canvas within our page
-            // This gives us more control over text extraction
-            const arrayBuffer = await this.readFileAsArrayBuffer(file);
-            this.pdfData = arrayBuffer;
+            // Update UI
+            $('#processed-count').text('0');
+            $('#total-count').text('0');
             
-            // Load the PDF using PDF.js
-            const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
-            this.currentDocument = pdf;
-            
-            // Create a simple HTML page with the PDF viewer
-            const iframe = document.getElementById('document-iframe');
-            const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-            
-            // Create a basic HTML structure for the PDF viewer
-            iframeDoc.open();
-            iframeDoc.write(`
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>PDF Viewer</title>
-                    <style>
-                        body { margin: 0; padding: 0; }
-                        .pdf-page { position: relative; margin: 10px auto; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
-                        .text-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; color: transparent; }
-                        .text-content { position: absolute; cursor: pointer; }
-                        .text-content:hover { background-color: rgba(0,255,0,0.1); }
-                        .paragraph-group { opacity: 0.5; transition: opacity 0.3s ease; }
-                        .paragraph-group.read { opacity: 1; }
-                    </style>
-                </head>
-                <body>
-                    <div id="pdf-container"></div>
-                </body>
-                </html>
-            `);
-            iframeDoc.close();
-            
-            // Wait for the iframe to load
-            await new Promise(resolve => {
-                iframe.onload = resolve;
-                // If already loaded, resolve immediately
-                if (iframeDoc.readyState === 'complete') {
-                    resolve();
-                }
-            });
-            
-            // Render the PDF in the iframe
-            await this.renderPdfInIframe(pdf, iframe);
-            
-            // Set up click handlers in the iframe
-            this.setupPdfClickHandlers(iframe);
-            
-            // Apply dimming if enabled
-            if ($('#dim-unread').is(':checked')) {
-                this.applyDimming();
-            }
-            
-            // Trigger document loaded event
-            $(document).trigger('document-loaded');
         } catch (error) {
-            console.error('Error loading document:', error);
-            alert('Error loading document: ' + error.message);
+            console.error('Error loading PDF:', error);
+            alert('Error loading PDF: ' + error.message);
         }
     }
     
-    async fetchFromUrl(url) {
+    setupIframeInteractions(iframe) {
         try {
-            // Show loading indicator
-            const $loading = $('<div>').addClass('loading');
-            $('#sidebar').append($loading);
-            
-            // Fetch document from URL
-            const response = await $.ajax({
-                url: '/fetch-url',
-                type: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({ url })
-            });
-            
-            if (response.success) {
-                // Reset state
-                this.currentDocument = null;
-                this.documentType = response.file.type;
-                this.extractedText = '';
-                this.readParagraphs = new Set(); // Reset read paragraphs
-                
-                // Update UI
-                $('#processed-count').text('0');
-                $('#total-count').text('0');
-                
-                // Reset metrics
-                this.metrics = {
-                    startTime: Date.now(),
-                    processingTimes: [],
-                    paragraphsProcessed: 0,
-                    promptTokens: 0,
-                    completionTokens: 0,
-                    totalTokens: 0,
-                    lexicalDensity: 0,
-                    speechActs: []
-                };
-                
-                // Load the document in the iframe
-                const iframe = document.getElementById('document-iframe');
-                iframe.src = response.file.path;
-                
-                // Set up iframe load event
-                iframe.onload = () => {
-                    this.setupIframeInteractions();
-                    
-                    // Apply dimming if enabled
-                    if ($('#dim-unread').is(':checked')) {
-                        this.applyDimming();
-                    }
-                    
-                    $(document).trigger('document-loaded');
-                };
-            } else {
-                alert('Failed to fetch document from URL');
-            }
-        } catch (error) {
-            console.error('Error fetching from URL:', error);
-            alert('Error fetching document: ' + (error.responseJSON?.error || error.statusText || error.message));
-        } finally {
-            // Remove loading indicator
-            $('.loading').remove();
-        }
-    }
-    
-    async renderPdfInIframe(pdf, iframe) {
-        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-        const container = iframeDoc.getElementById('pdf-container');
-        
-        // Clear container
-        container.innerHTML = '';
-        
-        // Get total pages
-        const numPages = pdf.numPages;
-        
-        // Render each page
-        for (let i = 1; i <= numPages; i++) {
-            const page = await pdf.getPage(i);
-            const scale = 1.5;
-            const viewport = page.getViewport({ scale });
-            
-            // Create page div
-            const pageDiv = document.createElement('div');
-            pageDiv.className = 'pdf-page';
-            pageDiv.style.width = viewport.width + 'px';
-            pageDiv.style.height = viewport.height + 'px';
-            pageDiv.setAttribute('data-page-number', i);
-            
-            // Create canvas
-            const canvas = document.createElement('canvas');
-            const context = canvas.getContext('2d');
-            canvas.width = viewport.width;
-            canvas.height = viewport.height;
-            
-            // Render PDF page to canvas
-            await page.render({
-                canvasContext: context,
-                viewport: viewport
-            }).promise;
-            
-            // Add canvas to page div
-            pageDiv.appendChild(canvas);
-            
-            // Create text layer
-            const textLayer = document.createElement('div');
-            textLayer.className = 'text-layer';
-            
-            // Get text content
-            const textContent = await page.getTextContent();
-            
-            // Process text items
-            textContent.items.forEach((item, index) => {
-                const tx = pdfjsLib.Util.transform(
-                    viewport.transform,
-                    item.transform
-                );
-                
-                const textDiv = document.createElement('div');
-                textDiv.className = 'text-content';
-                textDiv.setAttribute('data-text-index', index);
-                textDiv.textContent = item.str;
-                textDiv.style.left = tx[4] + 'px';
-                textDiv.style.top = tx[5] + 'px';
-                textDiv.style.fontSize = tx[0] + 'px';
-                textDiv.style.width = item.width * scale + 'px';
-                textDiv.style.height = item.height * scale + 'px';
-                textDiv.style.position = 'absolute';
-                textDiv.style.pointerEvents = 'auto';
-                
-                // Store the text content as a data attribute
-                textDiv.setAttribute('data-text', item.str);
-                
-                textLayer.appendChild(textDiv);
-            });
-            
-            // Add text layer to page div
-            pageDiv.appendChild(textLayer);
-            
-            // Add page div to container
-            container.appendChild(pageDiv);
-        }
-    }
-    
-    setupPdfClickHandlers(iframe) {
-        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-        
-        // Add click event to all text elements
-        const textElements = iframeDoc.querySelectorAll('.text-content');
-        textElements.forEach(element => {
-            element.addEventListener('click', (e) => {
-                // Find the paragraph or section containing this text
-                const text = this.extractPdfParagraph(e.target, iframeDoc);
+            // Add click event listener to the iframe
+            iframe.contentDocument.addEventListener('click', async (e) => {
+                // Extract text at click position
+                const text = await this.extractTextAtPosition(e.clientX, e.clientY, iframe);
                 
                 if (text && text.trim().length > 0) {
                     this.extractedText = text;
-                    
-                    // Mark the paragraph as read
-                    this.markPdfParagraphAsRead(e.target, iframeDoc);
                     
                     // Display the extracted text
                     $('#original-text').text(text);
@@ -504,352 +224,354 @@ class LLMReader {
                     }
                 }
             });
-        });
-    }
-    
-    markPdfParagraphAsRead(element, doc) {
-        if ($('#dim-unread').is(':checked')) {
-            try {
-                // Get the page containing this element
-                const page = element.closest('.pdf-page');
-                if (!page) return;
-                
-                // Get paragraph boundaries
-                const paragraphInfo = this.getPdfParagraphBoundaries(element, doc);
-                if (!paragraphInfo) return;
-                
-                // Create a unique ID for this paragraph
-                const paragraphId = `pdf-paragraph-${paragraphInfo.startLineIndex}-${paragraphInfo.endLineIndex}-${paragraphInfo.pageNumber}`;
-                
-                // Check if we already have a group for this paragraph
-                let groupElement = doc.getElementById(paragraphId);
-                
-                if (!groupElement) {
-                    // Create a group element for this paragraph
-                    groupElement = doc.createElement('div');
-                    groupElement.id = paragraphId;
-                    groupElement.className = 'paragraph-group';
-                    groupElement.style.position = 'absolute';
-                    
-                    // Position the group to cover the paragraph
-                    const top = Math.min(...paragraphInfo.lines.flat().map(el => parseFloat(el.style.top)));
-                    const left = Math.min(...paragraphInfo.lines.flat().map(el => parseFloat(el.style.left)));
-                    const bottom = Math.max(...paragraphInfo.lines.flat().map(el => parseFloat(el.style.top) + parseFloat(el.style.height)));
-                    const right = Math.max(...paragraphInfo.lines.flat().map(el => parseFloat(el.style.left) + parseFloat(el.style.width)));
-                    
-                    groupElement.style.top = `${top}px`;
-                    groupElement.style.left = `${left}px`;
-                    groupElement.style.width = `${right - left}px`;
-                    groupElement.style.height = `${bottom - top}px`;
-                    
-                    // Add to the page
-                    page.appendChild(groupElement);
-                }
-                
-                // Mark as read
-                groupElement.classList.add('read');
-                this.readParagraphs.add(paragraphId);
-                
-            } catch (error) {
-                console.error('Error marking PDF paragraph as read:', error);
-            }
+            
+            console.log('Iframe interactions set up successfully');
+        } catch (error) {
+            console.error('Error setting up iframe interactions:', error);
         }
     }
     
-    getPdfParagraphBoundaries(element, doc) {
-        // Get the page containing this element
-        const page = element.closest('.pdf-page');
-        if (!page) return null;
-        
-        const pageNumber = page.getAttribute('data-page-number');
-        
-        // Get all text elements on this page
-        const textElements = Array.from(page.querySelectorAll('.text-content'));
-        
-        // Get the index of the clicked element
-        const index = textElements.indexOf(element);
-        if (index === -1) return null;
-        
-        // Sort text elements by vertical position (top to bottom)
-        const sortedElements = [...textElements].sort((a, b) => {
-            return parseFloat(a.style.top) - parseFloat(b.style.top);
-        });
-        
-        // Group elements into lines based on vertical position
-        const lines = [];
-        let currentLine = [sortedElements[0]];
-        
-        for (let i = 1; i < sortedElements.length; i++) {
-            const prevElement = sortedElements[i - 1];
-            const currElement = sortedElements[i];
-            
-            const prevY = parseFloat(prevElement.style.top);
-            const currY = parseFloat(currElement.style.top);
-            
-            // If vertical positions are close, they're on the same line
-            if (Math.abs(currY - prevY) < 5) {
-                currentLine.push(currElement);
-            } else {
-                // Sort line elements by horizontal position (left to right)
-                currentLine.sort((a, b) => parseFloat(a.style.left) - parseFloat(b.style.left));
-                lines.push(currentLine);
-                currentLine = [currElement];
-            }
-        }
-        
-        // Add the last line
-        if (currentLine.length > 0) {
-            currentLine.sort((a, b) => parseFloat(a.style.left) - parseFloat(b.style.left));
-            lines.push(currentLine);
-        }
-        
-        // Find the line containing the clicked element
-        let clickedLineIndex = -1;
-        for (let i = 0; i < lines.length; i++) {
-            if (lines[i].includes(element)) {
-                clickedLineIndex = i;
-                break;
-            }
-        }
-        
-        if (clickedLineIndex === -1) {
-            return null;
-        }
-        
-        // Identify paragraph boundaries
-        // A paragraph is a sequence of lines with similar indentation and spacing
-        let startLineIndex = clickedLineIndex;
-        let endLineIndex = clickedLineIndex;
-        
-        // Find the start of the paragraph (going upward)
-        for (let i = clickedLineIndex - 1; i >= 0; i--) {
-            const currLine = lines[i];
-            const nextLine = lines[i + 1];
-            
-            // Check if there's a significant gap between lines
-            const currBottom = Math.max(...currLine.map(el => parseFloat(el.style.top) + parseFloat(el.style.height)));
-            const nextTop = Math.min(...nextLine.map(el => parseFloat(el.style.top)));
-            
-            // If the gap is too large, it's likely a paragraph break
-            if (nextTop - currBottom > 15) {
-                break;
-            }
-            
-            // Check if indentation changes significantly
-            const currLeft = Math.min(...currLine.map(el => parseFloat(el.style.left)));
-            const nextLeft = Math.min(...nextLine.map(el => parseFloat(el.style.left)));
-            
-            // If indentation changes significantly, it's likely a paragraph break
-            if (Math.abs(currLeft - nextLeft) > 20) {
-                break;
-            }
-            
-            startLineIndex = i;
-        }
-        
-        // Find the end of the paragraph (going downward)
-        for (let i = clickedLineIndex + 1; i < lines.length; i++) {
-            const prevLine = lines[i - 1];
-            const currLine = lines[i];
-            
-            // Check if there's a significant gap between lines
-            const prevBottom = Math.max(...prevLine.map(el => parseFloat(el.style.top) + parseFloat(el.style.height)));
-            const currTop = Math.min(...currLine.map(el => parseFloat(el.style.top)));
-            
-            // If the gap is too large, it's likely a paragraph break
-            if (currTop - prevBottom > 15) {
-                break;
-            }
-            
-            // Check if indentation changes significantly
-            const prevLeft = Math.min(...prevLine.map(el => parseFloat(el.style.left)));
-            const currLeft = Math.min(...currLine.map(el => parseFloat(el.style.left)));
-            
-            // If indentation changes significantly, it's likely a paragraph break
-            if (Math.abs(prevLeft - currLeft) > 20) {
-                break;
-            }
-            
-            endLineIndex = i;
-        }
-        
-        return {
-            startLineIndex,
-            endLineIndex,
-            pageNumber,
-            lines: lines.slice(startLineIndex, endLineIndex + 1)
-        };
-    }
-    
-    extractPdfParagraph(element, doc) {
-        // Get the page containing this element
-        const page = element.closest('.pdf-page');
-        if (!page) return element.getAttribute('data-text');
-        
-        // Get all text elements on this page
-        const textElements = Array.from(page.querySelectorAll('.text-content'));
-        
-        // Get the index of the clicked element
-        const index = textElements.indexOf(element);
-        if (index === -1) return element.getAttribute('data-text');
-        
-        // Sort text elements by vertical position (top to bottom)
-        const sortedElements = [...textElements].sort((a, b) => {
-            return parseFloat(a.style.top) - parseFloat(b.style.top);
-        });
-        
-        // Group elements into lines based on vertical position
-        const lines = [];
-        let currentLine = [sortedElements[0]];
-        
-        for (let i = 1; i < sortedElements.length; i++) {
-            const prevElement = sortedElements[i - 1];
-            const currElement = sortedElements[i];
-            
-            const prevY = parseFloat(prevElement.style.top);
-            const currY = parseFloat(currElement.style.top);
-            
-            // If vertical positions are close, they're on the same line
-            if (Math.abs(currY - prevY) < 5) {
-                currentLine.push(currElement);
-            } else {
-                // Sort line elements by horizontal position (left to right)
-                currentLine.sort((a, b) => parseFloat(a.style.left) - parseFloat(b.style.left));
-                lines.push(currentLine);
-                currentLine = [currElement];
-            }
-        }
-        
-        // Add the last line
-        if (currentLine.length > 0) {
-            currentLine.sort((a, b) => parseFloat(a.style.left) - parseFloat(b.style.left));
-            lines.push(currentLine);
-        }
-        
-        // Find the line containing the clicked element
-        let clickedLineIndex = -1;
-        for (let i = 0; i < lines.length; i++) {
-            if (lines[i].includes(element)) {
-                clickedLineIndex = i;
-                break;
-            }
-        }
-        
-        if (clickedLineIndex === -1) {
-            return element.getAttribute('data-text');
-        }
-        
-        // Identify paragraph boundaries
-        // A paragraph is a sequence of lines with similar indentation and spacing
-        let startLineIndex = clickedLineIndex;
-        let endLineIndex = clickedLineIndex;
-        
-        // Find the start of the paragraph (going upward)
-        for (let i = clickedLineIndex - 1; i >= 0; i--) {
-            const currLine = lines[i];
-            const nextLine = lines[i + 1];
-            
-            // Check if there's a significant gap between lines
-            const currBottom = Math.max(...currLine.map(el => parseFloat(el.style.top) + parseFloat(el.style.height)));
-            const nextTop = Math.min(...nextLine.map(el => parseFloat(el.style.top)));
-            
-            // If the gap is too large, it's likely a paragraph break
-            if (nextTop - currBottom > 15) {
-                break;
-            }
-            
-            // Check if indentation changes significantly
-            const currLeft = Math.min(...currLine.map(el => parseFloat(el.style.left)));
-            const nextLeft = Math.min(...nextLine.map(el => parseFloat(el.style.left)));
-            
-            // If indentation changes significantly, it's likely a paragraph break
-            if (Math.abs(currLeft - nextLeft) > 20) {
-                break;
-            }
-            
-            startLineIndex = i;
-        }
-        
-        // Find the end of the paragraph (going downward)
-        for (let i = clickedLineIndex + 1; i < lines.length; i++) {
-            const prevLine = lines[i - 1];
-            const currLine = lines[i];
-            
-            // Check if there's a significant gap between lines
-            const prevBottom = Math.max(...prevLine.map(el => parseFloat(el.style.top) + parseFloat(el.style.height)));
-            const currTop = Math.min(...currLine.map(el => parseFloat(el.style.top)));
-            
-            // If the gap is too large, it's likely a paragraph break
-            if (currTop - prevBottom > 15) {
-                break;
-            }
-            
-            // Check if indentation changes significantly
-            const prevLeft = Math.min(...prevLine.map(el => parseFloat(el.style.left)));
-            const currLeft = Math.min(...currLine.map(el => parseFloat(el.style.left)));
-            
-            // If indentation changes significantly, it's likely a paragraph break
-            if (Math.abs(prevLeft - currLeft) > 20) {
-                break;
-            }
-            
-            endLineIndex = i;
-        }
-        
-        // Extract text from the identified paragraph
-        let paragraphText = '';
-        for (let i = startLineIndex; i <= endLineIndex; i++) {
-            const lineText = lines[i]
-                .map(el => el.getAttribute('data-text'))
-                .join(' ');
-            
-            paragraphText += (i > startLineIndex ? ' ' : '') + lineText;
-        }
-        
-        return paragraphText;
-    }
-    
-    setupIframeInteractions() {
+    async extractTextAtPosition(x, y, iframe) {
         try {
-            const iframe = document.getElementById('document-iframe');
-            const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-            
-            // Check if we can access the iframe content
-            if (!iframeDoc) {
-                console.error('Cannot access iframe content - possible cross-origin restriction');
-                return;
+            // For PDF files, we need to use PDF.js to extract text
+            if (this.pdfUrl && this.pdfUrl.includes('.pdf')) {
+                // This is a simplified approach - in a real implementation,
+                // you would need to convert iframe coordinates to PDF coordinates
+                // and extract the specific paragraph or section at that position
+                
+                // For now, we'll just extract text from the current visible page
+                const pdf = await pdfjsLib.getDocument(this.pdfUrl).promise;
+                const page = await pdf.getPage(1); // Get the first page
+                const textContent = await page.getTextContent();
+                
+                // Find text near the click position
+                // This is a simplified approach - in a real implementation,
+                // you would need to use the position information to find the exact text
+                
+                // For now, just return all text from the page
+                return textContent.items.map(item => item.str).join(' ');
+            } else {
+                // For HTML content, we can use the DOM to extract text
+                const element = iframe.contentDocument.elementFromPoint(x, y);
+                if (element) {
+                    // Try to get the paragraph or section containing the clicked element
+                    const container = this.findTextContainer(element);
+                    return container ? container.textContent.trim() : element.textContent.trim();
+                }
             }
             
-            // Add CSS for dimming if needed
-            if ($('#dim-unread').is(':checked')) {
-                this.applyDimming();
-            }
+            return '';
+        } catch (error) {
+            console.error('Error extracting text:', error);
+            return '';
+        }
+    }
+    
+    findTextContainer(element) {
+        // Try to find the most appropriate container (paragraph, section, etc.)
+        const textContainers = ['P', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'DIV', 'SECTION', 'ARTICLE'];
+        
+        let container = element;
+        while (container && !textContainers.includes(container.nodeName)) {
+            container = container.parentNode;
+        }
+        
+        return container;
+    }
+    
+    async processExtractedText() {
+        if (!this.extractedText || this.extractedText.trim().length === 0) {
+            return;
+        }
+        
+        // Get user preferences
+        const readingLevel = $('#reading-level').val();
+        const language = $('#language').val();
+        const style = $('#style').val();
+        const apiKey = $('#api-key').val();
+        const model = $('#model').val();
+        
+        // Record start time for latency measurement
+        const startTime = Date.now();
+        
+        try {
+            // Process with LLM
+            const processedText = await this.processWithLLM(
+                this.extractedText,
+                readingLevel,
+                language,
+                style,
+                apiKey,
+                model
+            );
             
-            // For HTML documents, add click event listener
-            if (this.documentType === 'html') {
-                iframeDoc.addEventListener('click', (e) => {
-                    // Extract text at click position
-                    const text = this.extractTextFromHtml(e.target, iframeDoc);
-                    
-                    if (text && text.trim().length > 0) {
-                        this.extractedText = text;
-                        
-                        // Mark the paragraph as read
-                        this.markAsRead(e.target);
-                        
-                        // Display the extracted text
-                        $('#original-text').text(text);
-                        $('#processed-text').empty();
-                        
-                        // Show the processing overlay
-                        $('#processing-overlay').css('display', 'flex');
-                        
-                        // Process the text if auto-process is enabled
-                        if ($('#auto-process').is(':checked')) {
-                            this.processExtractedText();
-                        }
-                    }
+            // Record end time and calculate latency
+            const endTime = Date.now();
+            const latency = endTime - startTime;
+            
+            // Update metrics
+            this.metrics.processingTimes.push(latency);
+            this.metrics.paragraphsProcessed++;
+            this.updateMetricsDisplay();
+            
+            // Send metrics to LRS if tracking is enabled
+            if ($('#track-metrics').is(':checked')) {
+                this.sendToLRS({
+                    action: 'processed',
+                    text: this.extractedText.substring(0, 100) + '...',
+                    latency: latency,
+                    readingLevel: readingLevel,
+                    language: language,
+                    style: style,
+                    model: model
                 });
             }
             
-            console.log('
+            // Display processed text
+            $('#processed-text').html(processedText);
+            
+            // Update processed count
+            $('#processed-count').text(this.metrics.paragraphsProcessed);
+        } catch (error) {
+            console.error('Error processing text:', error);
+            $('#processed-text').html(`<div style="color: red;">Error: ${error.message}</div>`);
+        }
+    }
+    
+    readFileAsArrayBuffer(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsArrayBuffer(file);
+        });
+    }
+    
+    async processWithLLM(text, readingLevel, language, style, apiKey, model) {
+        if (!apiKey) {
+            throw new Error('API key is required');
+        }
+        
+        // Construct prompt based on user preferences
+        let prompt = `Please rewrite the following text `;
+        
+        if (readingLevel !== 'original') {
+            prompt += `at a ${readingLevel} reading level `;
+        }
+        
+        if (language !== 'original') {
+            prompt += `in ${language} `;
+        }
+        
+        if (style !== 'original') {
+            prompt += `using a ${style} style `;
+        }
+        
+        prompt += `while preserving the original meaning and key information:\n\n${text}`;
+        
+        // Call appropriate LLM API based on model selection
+        let response;
+        
+        switch (model) {
+            case 'gpt-4':
+            case 'gpt-3.5-turbo':
+                response = await this.callOpenAI(prompt, apiKey, model);
+                break;
+            case 'claude-3':
+                response = await this.callClaude(prompt, apiKey);
+                break;
+            case 'gemini-pro':
+                response = await this.callGemini(prompt, apiKey);
+                break;
+            default:
+                throw new Error(`Unsupported model: ${model}`);
+        }
+        
+        return response;
+    }
+    
+    async callOpenAI(prompt, apiKey, model) {
+        try {
+            const response = await $.ajax({
+                url: 'https://api.openai.com/v1/chat/completions',
+                type: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                data: JSON.stringify({
+                    model: model,
+                    messages: [
+                        {
+                            role: 'system',
+                            content: 'You are a helpful assistant that rewrites text based on user preferences.'
+                        },
+                        {
+                            role: 'user',
+                            content: prompt
+                        }
+                    ],
+                    temperature: 0.7
+                })
+            });
+            
+            return response.choices[0].message.content;
+        } catch (error) {
+            console.error('OpenAI API error:', error);
+            throw new Error(`OpenAI API error: ${error.responseJSON?.error?.message || error.statusText}`);
+        }
+    }
+    
+    async callClaude(prompt, apiKey) {
+        try {
+            const response = await $.ajax({
+                url: 'https://api.anthropic.com/v1/messages',
+                type: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                    'anthropic-version': '2023-06-01'
+                },
+                data: JSON.stringify({
+                    model: 'claude-3-sonnet-20240229',
+                    max_tokens: 1000,
+                    messages: [
+                        {
+                            role: 'user',
+                            content: prompt
+                        }
+                    ]
+                })
+            });
+            
+            return response.content[0].text;
+        } catch (error) {
+            console.error('Claude API error:', error);
+            throw new Error(`Claude API error: ${error.responseJSON?.error?.message || error.statusText}`);
+        }
+    }
+    
+    async callGemini(prompt, apiKey) {
+        try {
+            const response = await $.ajax({
+                url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`,
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    contents: [
+                        {
+                            parts: [
+                                {
+                                    text: prompt
+                                }
+                            ]
+                        }
+                    ],
+                    generationConfig: {
+                        temperature: 0.7,
+                        maxOutputTokens: 1000
+                    }
+                })
+            });
+            
+            return response.candidates[0].content.parts[0].text;
+        } catch (error) {
+            console.error('Gemini API error:', error);
+            throw new Error(`Gemini API error: ${error.responseJSON?.error?.message || error.statusText}`);
+        }
+    }
+    
+    sendToLRS(data) {
+        const lrsEndpoint = $('#lrs-endpoint').val();
+        const lrsUsername = $('#lrs-username').val();
+        const lrsPassword = $('#lrs-password').val();
+        
+        if (!lrsEndpoint || !lrsUsername || !lrsPassword) {
+            console.warn('LRS credentials not provided, skipping metrics submission');
+            return;
+        }
+        
+        // Create xAPI statement
+        const statement = {
+            actor: {
+                name: 'LLM Reader User',
+                mbox: 'mailto:user@example.com'
+            },
+            verb: {
+                id: data.action === 'processed' 
+                    ? 'http://adlnet.gov/expapi/verbs/completed'
+                    : 'http://adlnet.gov/expapi/verbs/experienced',
+                display: {
+                    'en-US': data.action === 'processed' ? 'processed' : 'assessed'
+                }
+            },
+            object: {
+                id: `http://example.com/llmreader/text/${Date.now()}`,
+                definition: {
+                    name: {
+                        'en-US': `Text ${Date.now()}`
+                    }
+                }
+            },
+            result: {
+                extensions: {
+                    'http://example.com/llmreader/metrics': {
+                        latency: data.latency,
+                        readingLevel: data.readingLevel,
+                        language: data.language,
+                        style: data.style,
+                        model: data.model,
+                        timestamp: new Date().toISOString()
+                    }
+                }
+            },
+            timestamp: new Date().toISOString()
+        };
+        
+        // Send to LRS
+        $.ajax({
+            url: lrsEndpoint + 'statements',
+            type: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Basic ' + btoa(lrsUsername + ':' + lrsPassword)
+            },
+            data: JSON.stringify(statement),
+            success: function(data) {
+                console.log('Metrics sent to LRS:', data);
+            },
+            error: function(error) {
+                console.error('Error sending metrics to LRS:', error);
+            }
+        });
+    }
+    
+    updateMetricsDisplay() {
+        // Update processed count
+        $('#processed-count').text(this.metrics.paragraphsProcessed);
+        
+        // Calculate and update average latency
+        if (this.metrics.processingTimes.length > 0) {
+            const avgLatency = this.metrics.processingTimes.reduce((a, b) => a + b, 0) / this.metrics.processingTimes.length;
+            $('#avg-latency').text(Math.round(avgLatency));
+        }
+        
+        // Update reading time
+        if (this.metrics.startTime) {
+            const readingTime = Math.round((Date.now() - this.metrics.startTime) / 1000);
+            $('#reading-time').text(readingTime);
+        }
+    }
+}
+
+// Initialize the reader when the document is ready
+$(document).ready(function() {
+    window.reader = new LLMReader();
+    
+    // Add process button functionality
+    $('#process-button').on('click', function() {
+        if (window.reader) {
+            window.reader.processExtractedText();
+        }
+    });
+});

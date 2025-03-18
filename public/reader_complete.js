@@ -27,7 +27,9 @@ class LLMReader {
             completionTokens: 0,
             totalTokens: 0,
             lexicalDensity: 0,
-            speechActs: []
+            speechActs: [],
+            lastPromptTime: null, // Track time of last prompt for latency calculation
+            promptToPromptLatency: 0 // Time between prompts
         };
         
         // Initialize chat interface
@@ -123,7 +125,7 @@ class LLMReader {
             }
         });
         
-        // URL input
+        // PDF URL input
         $('#fetch-url-btn').on('click', () => {
             const url = $('#url-input').val().trim();
             if (url) {
@@ -133,10 +135,30 @@ class LLMReader {
             }
         });
         
-        // Enter key in URL input
+        // Enter key in PDF URL input
         $('#url-input').on('keypress', (e) => {
             if (e.which === 13) { // Enter key
                 const url = $('#url-input').val().trim();
+                if (url) {
+                    this.fetchFromUrl(url);
+                }
+            }
+        });
+        
+        // HTML URL input
+        $('#html-fetch-url-btn').on('click', () => {
+            const url = $('#html-url-input').val().trim();
+            if (url) {
+                this.fetchFromUrl(url);
+            } else {
+                alert('Please enter a valid URL');
+            }
+        });
+        
+        // Enter key in HTML URL input
+        $('#html-url-input').on('keypress', (e) => {
+            if (e.which === 13) { // Enter key
+                const url = $('#html-url-input').val().trim();
                 if (url) {
                     this.fetchFromUrl(url);
                 }
@@ -176,6 +198,11 @@ class LLMReader {
             this.processExtractedText();
         });
         
+        // Assessment button
+        $('#assessment-button').on('click', () => {
+            this.openAssessment();
+        });
+        
         // Document iframe click handler
         $('#document-iframe').on('load', () => {
             this.setupIframeInteractions();
@@ -205,18 +232,25 @@ class LLMReader {
                 this.removeDimming();
             }
         });
+        
+        // Initialize collapsible sections
+        $('.collapsible-header').on('click', function() {
+            $(this).toggleClass('collapsed');
+            $(this).closest('.collapsible').find('.collapsible-content').slideToggle(200);
+        });
     }
     
     async loadDocument(file) {
         try {
-            // Determine file type based on extension or MIME type
-            const fileType = file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf' 
-                ? 'pdf' 
-                : 'html';
+            // Only allow PDF files for upload
+            if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
+                alert('Only PDF files are supported for upload. For HTML content, please use the URL option.');
+                return;
+            }
             
             // Reset state
             this.currentDocument = file;
-            this.documentType = fileType;
+            this.documentType = 'pdf';
             this.extractedText = '';
             this.readParagraphs = new Set(); // Reset read paragraphs
             
@@ -228,92 +262,75 @@ class LLMReader {
             this.metrics = {
                 startTime: Date.now(),
                 processingTimes: [],
-                paragraphsProcessed: 0
+                paragraphsProcessed: 0,
+                promptTokens: 0,
+                completionTokens: 0,
+                totalTokens: 0,
+                lexicalDensity: 0,
+                speechActs: [],
+                lastPromptTime: null,
+                promptToPromptLatency: 0
             };
             
-            // Create a URL for the file
-            if (fileType === 'pdf') {
-                // For PDFs, we'll use PDF.js to render in a canvas within our page
-                // This gives us more control over text extraction
-                const arrayBuffer = await this.readFileAsArrayBuffer(file);
-                this.pdfData = arrayBuffer;
-                
-                // Load the PDF using PDF.js
-                const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
-                this.currentDocument = pdf;
-                
-                // Create a simple HTML page with the PDF viewer
-                const iframe = document.getElementById('document-iframe');
-                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-                
-                // Create a basic HTML structure for the PDF viewer
-                iframeDoc.open();
-                iframeDoc.write(`
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                        <title>PDF Viewer</title>
-                        <style>
-                            body { margin: 0; padding: 0; }
-                            .pdf-page { position: relative; margin: 10px auto; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
-                            .text-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; color: transparent; }
-                            .text-content { position: absolute; cursor: pointer; }
-                            .text-content:hover { background-color: rgba(0,255,0,0.1); }
-                            .paragraph-group { opacity: 0.5; transition: opacity 0.3s ease; }
-                            .paragraph-group.read { opacity: 1; }
-                        </style>
-                    </head>
-                    <body>
-                        <div id="pdf-container"></div>
-                    </body>
-                    </html>
-                `);
-                iframeDoc.close();
-                
-                // Wait for the iframe to load
-                await new Promise(resolve => {
-                    iframe.onload = resolve;
-                    // If already loaded, resolve immediately
-                    if (iframeDoc.readyState === 'complete') {
-                        resolve();
-                    }
-                });
-                
-                // Render the PDF in the iframe
-                await this.renderPdfInIframe(pdf, iframe);
-                
-                // Set up click handlers in the iframe
-                this.setupPdfClickHandlers(iframe);
-                
-                // Apply dimming if enabled
-                if ($('#dim-unread').is(':checked')) {
-                    this.applyDimming();
+            // For PDFs, we'll use PDF.js to render in a canvas within our page
+            // This gives us more control over text extraction
+            const arrayBuffer = await this.readFileAsArrayBuffer(file);
+            this.pdfData = arrayBuffer;
+            
+            // Load the PDF using PDF.js
+            const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+            this.currentDocument = pdf;
+            
+            // Create a simple HTML page with the PDF viewer
+            const iframe = document.getElementById('document-iframe');
+            const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+            
+            // Create a basic HTML structure for the PDF viewer
+            iframeDoc.open();
+            iframeDoc.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>PDF Viewer</title>
+                    <style>
+                        body { margin: 0; padding: 0; }
+                        .pdf-page { position: relative; margin: 10px auto; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+                        .text-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; color: transparent; }
+                        .text-content { position: absolute; cursor: pointer; }
+                        .text-content:hover { background-color: rgba(0,255,0,0.1); }
+                        .paragraph-group { opacity: 0.5; transition: opacity 0.3s ease; }
+                        .paragraph-group.read { opacity: 1; }
+                    </style>
+                </head>
+                <body>
+                    <div id="pdf-container"></div>
+                </body>
+                </html>
+            `);
+            iframeDoc.close();
+            
+            // Wait for the iframe to load
+            await new Promise(resolve => {
+                iframe.onload = resolve;
+                // If already loaded, resolve immediately
+                if (iframeDoc.readyState === 'complete') {
+                    resolve();
                 }
-                
-                // Trigger document loaded event
-                $(document).trigger('document-loaded');
-            } else {
-                // For HTML, we can load it directly in the iframe
-                const text = await this.readFileAsText(file);
-                const htmlBlob = new Blob([text], { type: 'text/html' });
-                const htmlUrl = URL.createObjectURL(htmlBlob);
-                
-                // Load the HTML in the iframe
-                const iframe = document.getElementById('document-iframe');
-                iframe.src = htmlUrl;
-                
-                // Set up iframe load event
-                iframe.onload = () => {
-                    this.setupIframeInteractions();
-                    
-                    // Apply dimming if enabled
-                    if ($('#dim-unread').is(':checked')) {
-                        this.applyDimming();
-                    }
-                    
-                    $(document).trigger('document-loaded');
-                };
+            });
+            
+            // Render the PDF in the iframe
+            await this.renderPdfInIframe(pdf, iframe);
+            
+            // Set up click handlers in the iframe
+            this.setupPdfClickHandlers(iframe);
+            
+            // Apply dimming if enabled
+            if ($('#dim-unread').is(':checked')) {
+                this.applyDimming();
             }
+            
+            // Trigger document loaded event
+            $(document).trigger('document-loaded');
         } catch (error) {
             console.error('Error loading document:', error);
             alert('Error loading document: ' + error.message);
@@ -349,7 +366,14 @@ class LLMReader {
                 this.metrics = {
                     startTime: Date.now(),
                     processingTimes: [],
-                    paragraphsProcessed: 0
+                    paragraphsProcessed: 0,
+                    promptTokens: 0,
+                    completionTokens: 0,
+                    totalTokens: 0,
+                    lexicalDensity: 0,
+                    speechActs: [],
+                    lastPromptTime: null,
+                    promptToPromptLatency: 0
                 };
                 
                 // Load the document in the iframe
@@ -820,329 +844,3 @@ class LLMReader {
                         this.markAsRead(e.target);
                         
                         // Display the extracted text
-                        $('#original-text').text(text);
-                        $('#processed-text').empty();
-                        
-                        // Show the processing overlay
-                        $('#processing-overlay').css('display', 'flex');
-                        
-                        // Process the text if auto-process is enabled
-                        if ($('#auto-process').is(':checked')) {
-                            this.processExtractedText();
-                        }
-                    }
-                });
-            }
-            
-            console.log('Iframe interactions set up successfully');
-        } catch (error) {
-            console.error('Error setting up iframe interactions:', error);
-        }
-    }
-    
-    applyDimming() {
-        try {
-            const iframe = document.getElementById('document-iframe');
-            const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-            
-            // Add CSS for dimming
-            const style = iframeDoc.createElement('style');
-            style.id = 'dimming-style';
-            style.textContent = `
-                body * {
-                    opacity: 0.5;
-                    transition: opacity 0.3s ease;
-                }
-                .read-paragraph {
-                    opacity: 1 !important;
-                }
-                .paragraph-group {
-                    opacity: 0.5;
-                    transition: opacity 0.3s ease;
-                }
-                .paragraph-group.read {
-                    opacity: 1 !important;
-                }
-            `;
-            iframeDoc.head.appendChild(style);
-        } catch (error) {
-            console.error('Error applying dimming:', error);
-        }
-    }
-    
-    removeDimming() {
-        try {
-            const iframe = document.getElementById('document-iframe');
-            const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-            
-            // Remove dimming style
-            const style = iframeDoc.getElementById('dimming-style');
-            if (style) {
-                style.remove();
-            }
-        } catch (error) {
-            console.error('Error removing dimming:', error);
-        }
-    }
-    
-    markAsRead(element) {
-        try {
-            if ($('#dim-unread').is(':checked')) {
-                // Find the paragraph container
-                const container = this.findTextContainer(element);
-                if (container) {
-                    // Add a class to mark it as read
-                    container.classList.add('read-paragraph');
-                    
-                    // Store the paragraph ID or some identifier
-                    const paragraphId = container.id || `paragraph-${Date.now()}`;
-                    if (!container.id) {
-                        container.id = paragraphId;
-                    }
-                    this.readParagraphs.add(paragraphId);
-                }
-            }
-        } catch (error) {
-            console.error('Error marking as read:', error);
-        }
-    }
-    
-    findTextContainer(element) {
-        // Try to find the most appropriate container (paragraph, section, etc.)
-        const textContainers = ['P', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'DIV', 'SECTION', 'ARTICLE'];
-        
-        let container = element;
-        while (container && !textContainers.includes(container.nodeName)) {
-            container = container.parentNode;
-            
-            // Stop if we reach the document body
-            if (container === document.body) {
-                container = element;
-                break;
-            }
-        }
-        
-        return container;
-    }
-    
-    extractTextFromHtml(element, doc) {
-        // Check if text-only mode is enabled
-        const textOnly = $('#text-only').is(':checked');
-        
-        // Try to find the most appropriate container (paragraph, section, etc.)
-        const textContainers = ['P', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'DIV', 'SECTION', 'ARTICLE'];
-        
-        let container = element;
-        while (container && !textContainers.includes(container.nodeName)) {
-            container = container.parentNode;
-            
-            // Stop if we reach the document body
-            if (container === doc.body) {
-                container = element;
-                break;
-            }
-        }
-        
-        if (textOnly) {
-            // Extract only text content, ignoring buttons, inputs, etc.
-            return this.getTextOnly(container);
-        } else {
-            return container ? container.textContent.trim() : element.textContent.trim();
-        }
-    }
-
-    getTextOnly(element) {
-        // Skip non-text elements
-        if (!element) return '';
-        
-        // Skip buttons, inputs, and other interactive elements
-        const skipTags = ['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'OPTION', 'SCRIPT', 'STYLE', 'IFRAME', 'CANVAS', 'SVG'];
-        if (skipTags.includes(element.nodeName)) {
-            return '';
-        }
-        
-        // If it's a text node, return its content
-        if (element.nodeType === Node.TEXT_NODE) {
-            return element.textContent.trim();
-        }
-        
-        // Recursively process child nodes
-        let text = '';
-        for (const child of element.childNodes) {
-            text += this.getTextOnly(child);
-        }
-        
-        return text.trim();
-    }
-
-    async processExtractedText() {
-        if (!this.extractedText || this.extractedText.trim().length === 0) {
-            return;
-        }
-        
-        // Get user preferences
-        const readingLevel = $('#reading-level').val();
-        const language = $('#language').val();
-        const style = $('#style').val();
-        const model = $('#model').val();
-        
-        // Record start time for latency measurement
-        const startTime = Date.now();
-        
-        try {
-            // Process with LLM via server API
-            const response = await $.ajax({
-                url: '/api/process',
-                type: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({
-                    text: this.extractedText,
-                    readingLevel: readingLevel,
-                    language: language,
-                    style: style,
-                    model: model,
-                    startTime: startTime,
-                    stream: false
-                })
-            });
-            
-            // Record end time and calculate latency
-            const endTime = Date.now();
-            const latency = response.latency || (endTime - startTime);
-            
-            // Update metrics
-            this.metrics.processingTimes.push(latency);
-            this.metrics.paragraphsProcessed++;
-            
-            // Update token metrics if available
-            if (response.promptTokens) {
-                this.metrics.promptTokens += response.promptTokens;
-            }
-            if (response.completionTokens) {
-                this.metrics.completionTokens += response.completionTokens;
-            }
-            if (response.totalTokens) {
-                this.metrics.totalTokens += response.totalTokens;
-            }
-            
-            // Update lexical density and speech acts if available
-            if (response.originalLexicalDensity !== undefined) {
-                this.metrics.lexicalDensity = response.originalLexicalDensity;
-            }
-            if (response.originalSpeechActs !== undefined) {
-                this.metrics.speechActs = response.originalSpeechActs;
-            }
-            
-            this.updateMetricsDisplay();
-            
-            // Send metrics to server if tracking is enabled
-            if ($('#track-metrics').is(':checked')) {
-                this.sendMetricsToServer({
-                    action: 'processed',
-                    paragraphId: `paragraph-${Date.now()}`, // Add a unique paragraphId
-                    text: this.extractedText.substring(0, 100) + '...',
-                    latency: latency,
-                    readingLevel: readingLevel,
-                    language: language,
-                    style: style,
-                    model: model,
-                    promptTokens: this.metrics.promptTokens,
-                    completionTokens: this.metrics.completionTokens,
-                    totalTokens: this.metrics.totalTokens,
-                    lexicalDensity: this.metrics.lexicalDensity,
-                    speechActs: this.metrics.speechActs
-                });
-            }
-            
-            // Display processed text
-            $('#processed-text').html(response.processedText);
-            
-            // Update processed count
-            $('#processed-count').text(this.metrics.paragraphsProcessed);
-        } catch (error) {
-            console.error('Error processing text:', error);
-            $('#processed-text').html(`<div style="color: red;">Error: ${error.message || 'Unknown error'}</div>`);
-        }
-    }
-    
-    sendMetricsToServer(data) {
-        $.ajax({
-            url: '/api/metrics',
-            type: 'POST',
-            contentType: 'application/json',
-            data: JSON.stringify(data),
-            error: function(error) {
-                console.error('Error sending metrics to server:', error);
-            }
-        });
-    }
-    
-    updateMetricsDisplay() {
-        // Update processed count
-        $('#processed-count').text(this.metrics.paragraphsProcessed);
-        
-        // Calculate and update average latency
-        if (this.metrics.processingTimes.length > 0) {
-            const avgLatency = this.metrics.processingTimes.reduce((a, b) => a + b, 0) / this.metrics.processingTimes.length;
-            $('#avg-latency').text(Math.round(avgLatency));
-        }
-        
-        // Update reading time
-        if (this.metrics.startTime) {
-            const readingTime = Math.round((Date.now() - this.metrics.startTime) / 1000);
-            $('#reading-time').text(readingTime);
-        }
-        
-        // Update token metrics
-        $('#prompt-tokens').text(this.metrics.promptTokens);
-        $('#completion-tokens').text(this.metrics.completionTokens);
-        $('#total-tokens').text(this.metrics.totalTokens);
-        
-        // Update lexical density if available
-        if (this.metrics.lexicalDensity !== undefined) {
-            $('#lexical-density').text(this.metrics.lexicalDensity);
-        }
-        
-        // Update speech acts if available
-        if (this.metrics.speechActs !== undefined && this.metrics.speechActs.length > 0) {
-            $('#speech-acts').text(this.metrics.speechActs.join(', '));
-        }
-    }
-
-    // Show document interface (iframe)
-    showDocumentInterface() {
-        $('#document-iframe').show();
-        $('#chat-container').hide();
-    }
-    
-    // Show chat interface
-    showChatInterface() {
-        $('#document-iframe').hide();
-        $('#chat-container').show();
-        
-        // Initialize chat if not already initialized
-        if (!this.chat) {
-            this.chat = new LLMChat();
-        }
-    }
-    
-    // Helper method to read file as ArrayBuffer
-    readFileAsArrayBuffer(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => resolve(e.target.result);
-            reader.onerror = (e) => reject(e.target.error);
-            reader.readAsArrayBuffer(file);
-        });
-    }
-    
-    // Helper method to read file as text
-    readFileAsText(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => resolve(e.target.result);
-            reader.onerror = (e) => reject(e.target.error);
-            reader.readAsText(file);
-        });
-    }
-}

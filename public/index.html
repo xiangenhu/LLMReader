@@ -305,13 +305,13 @@
                 <h3>Document Source</h3>
                 <div class="file-type-toggle">
                     <label>
-                        <input type="radio" name="file-type" value="pdf" checked> PDF
+                        <input type="radio" name="file-type" value="pdf"> PDF
                     </label>
                     <label>
                         <input type="radio" name="file-type" value="html"> HTML
                     </label>
                     <label>
-                        <input type="radio" name="file-type" value="chat"> Chat
+                        <input type="radio" name="file-type" value="chat" checked> Chat
                     </label>
                 </div>
                 
@@ -414,7 +414,7 @@
             </div>
             
             <div class="settings-group collapsible">
-                <h3 class="collapsible-header collapsed">Options</h3>
+                <h3 class="collapsible-header collapsed" id="options-header">Options</h3>
                 <div class="collapsible-content" style="display: none;">
                     <div>
                         <input type="checkbox" id="auto-process">
@@ -513,14 +513,8 @@
     <script src="reader.js"></script>
     <script src="chat.js"></script>
     <script>
-        // Add collapsible functionality
+        // Initialize all sections as collapsed
         $(document).ready(function() {
-            $('.collapsible-header').click(function() {
-                $(this).toggleClass('collapsed');
-                $(this).closest('.collapsible').find('.collapsible-content').slideToggle(200);
-            });
-            
-            // Initialize all sections as collapsed
             $('.collapsible-content').hide();
         });
     </script>
