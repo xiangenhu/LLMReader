@@ -161,7 +161,7 @@
         
         /* Chat Interface Styles */
         #chat-container {
-            display: none;
+            display: flex;
             flex-direction: column;
             height: 100%;
             width: 100%;
@@ -316,7 +316,7 @@
                 </div>
                 
                 <!-- PDF Form - Upload and URL -->
-                <div id="pdf-form">
+                <div id="pdf-form" style="display: none;">
                     <div id="file-drop">
                         <p>Drag & drop your PDF here</p>
                         <p>or</p>
@@ -328,6 +328,9 @@
                             <input type="text" id="url-input" placeholder="https://example.com/document.pdf">
                             <button id="fetch-url-btn" class="btn">Fetch</button>
                         </div>
+                    </div>
+                    <div style="margin-top: 15px; text-align: center;">
+                        <button id="extract-pdf-text-btn" class="btn" style="background-color: #FF9800;">Extract Text from PDF</button>
                     </div>
                 </div>
                 
@@ -343,7 +346,7 @@
                 </div>
                 
                 <!-- Chat Form - No upload or URL -->
-                <div id="chat-form" style="display: none;">
+                <div id="chat-form">
                     <p>Start chatting with the LLM using the chat interface.</p>
                 </div>
             </div>
@@ -410,6 +413,10 @@
                             <option value="google">Google</option>
                         </select>
                     </div>
+                    <div style="margin-top: 10px;">
+                        <label for="api-key">API Key:</label>
+                        <input type="password" id="api-key" placeholder="Enter your API key" style="width: 100%; padding: 5px;">
+                    </div>
                 </div>
             </div>
             
@@ -454,7 +461,7 @@
             </div>
         </div>
         <div id="content">
-            <iframe id="document-iframe" style="width: 100%; height: 100%; border: none;"></iframe>
+            <iframe id="document-iframe" style="width: 100%; height: 100%; border: none; display: none;"></iframe>
             
             <!-- Chat Interface -->
             <div id="chat-container">
@@ -510,7 +517,15 @@
         </div>
     </div>
     
-    <script src="reader.js"></script>
+    <!-- Load handlers first -->
+    <script src="ui-handler.js"></script>
+    <script src="pdf-handler.js"></script>
+    <script src="html-handler.js"></script>
+    <script src="metrics-handler.js"></script>
+    <script src="llm-handler.js"></script>
+    
+    <!-- Load base reader -->
+    <script src="base-reader.js"></script>
     <script src="chat.js"></script>
     <script>
         // Initialize all sections as collapsed

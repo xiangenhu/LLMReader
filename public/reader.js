@@ -141,6 +141,21 @@ class LLMReader {
         
         // Initialize collapsible sections
         this.initCollapsibleSections();
+        
+        // URL fetch buttons
+        $('#fetch-url-btn').on('click', () => {
+            const url = $('#url-input').val().trim();
+            if (url) {
+                this.loadPdfFromUrl(url);
+            }
+        });
+        
+        $('#html-fetch-url-btn').on('click', () => {
+            const url = $('#html-url-input').val().trim();
+            if (url) {
+                this.loadHtmlFromUrl(url);
+            }
+        });
     }
     
     initCollapsibleSections() {
@@ -168,21 +183,123 @@ class LLMReader {
         }
     }
     
+    loadPdfFromUrl(url) {
+        if (!url) {
+            console.error('URL is required');
+            return;
+        }
+        
+        console.log('Loading PDF from URL:', url);
+        
+        // Update UI to show document interface
+        this.showDocumentInterface();
+        
+        // Store the PDF URL
+        this.pdfUrl = url;
+        
+        // Load the PDF in the iframe
+        const iframe = document.getElementById('document-iframe');
+        
+        // Set up iframe load event before changing src
+        iframe.onload = () => {
+            console.log('PDF iframe loaded');
+            this.setupIframeInteractions(iframe);
+            $(document).trigger('pdf-loaded');
+            
+            // Add a direct click handler to the iframe
+            iframe.addEventListener('click', async (e) => {
+                console.log('PDF iframe clicked directly');
+                this.handlePdfClick(e);
+            });
+        };
+        
+        // Set the iframe src to load the PDF
+        iframe.src = url;
+        
+        // Reset metrics
+        this.metrics = {
+            startTime: Date.now(),
+            processingTimes: [],
+            paragraphsProcessed: 0
+        };
+        
+        // Update UI
+        $('#processed-count').text('0');
+        $('#total-count').text('0');
+    }
+    
+    loadHtmlFromUrl(url) {
+        if (!url) {
+            console.error('URL is required');
+            return;
+        }
+        
+        // Update UI to show document interface
+        this.showDocumentInterface();
+        
+        // Load the HTML in the iframe
+        const iframe = document.getElementById('document-iframe');
+        iframe.src = url;
+        
+        // Set up iframe load event
+        iframe.onload = () => {
+            this.setupIframeInteractions(iframe);
+            $(document).trigger('document-loaded');
+        };
+        
+        // Reset metrics
+        this.metrics = {
+            startTime: Date.now(),
+            processingTimes: [],
+            paragraphsProcessed: 0
+        };
+        
+        // Update UI
+        $('#processed-count').text('0');
+        $('#total-count').text('0');
+    }
+    
+    loadPdf(file) {
+        if (!file || file.type !== 'application/pdf') {
+            console.error('Invalid file type. Expected PDF.');
+            return;
+        }
+        
+        // Update UI to show document interface
+        this.showDocumentInterface();
+        
+        // Load the document
+        this.loadDocument(file);
+    }
+    
     async loadDocument(file) {
         try {
+            console.log('Loading PDF from file');
+            
             // Create a URL for the PDF file
             const pdfBlob = new Blob([await this.readFileAsArrayBuffer(file)], { type: 'application/pdf' });
             this.pdfUrl = URL.createObjectURL(pdfBlob);
             
+            console.log('Created blob URL for PDF:', this.pdfUrl);
+            
             // Load the PDF in the iframe
             const iframe = document.getElementById('document-iframe');
-            iframe.src = this.pdfUrl;
             
-            // Set up iframe load event
+            // Set up iframe load event before changing src
             iframe.onload = () => {
+                console.log('PDF iframe loaded from file');
                 this.setupIframeInteractions(iframe);
                 $(document).trigger('pdf-loaded');
+                
+                // Add a direct click handler to the iframe
+                iframe.addEventListener('click', async (e) => {
+                    console.log('PDF iframe clicked directly (from file)');
+                    this.handlePdfClick(e);
+                });
             };
+            
+            // Set the iframe src to load the PDF
+            iframe.src = this.pdfUrl;
             
             // Reset metrics
             this.metrics = {
@@ -201,31 +318,114 @@ class LLMReader {
         }
     }
     
+    // Handle PDF click event
+    async handlePdfClick(e) {
+        console.log('Handling PDF click at position:', e.clientX, e.clientY);
+        
+        // Extract text from the PDF using PDF.js directly
+        try {
+            // Load the PDF document directly using PDF.js
+            const loadingTask = pdfjsLib.getDocument(this.pdfUrl);
+            const pdf = await loadingTask.promise;
+            console.log('PDF loaded with', pdf.numPages, 'pages');
+            
+            // Get the first page
+            const page = await pdf.getPage(1);
+            
+            // Extract text content
+            const textContent = await page.getTextContent();
+            console.log('Extracted', textContent.items.length, 'text items from PDF');
+            
+            // Get text from the page
+            const text = textContent.items.map(item => item.str).join(' ');
+            
+            if (text && text.trim().length > 0) {
+                console.log('Extracted text:', text.substring(0, 50) + '...');
+                this.extractedText = text;
+                
+                // Display the extracted text
+                $('#original-text').text(text);
+                $('#processed-text').empty();
+                
+                // Show the processing overlay
+                $('#processing-overlay').css('display', 'flex');
+                
+                // Process the text if auto-process is enabled
+                if ($('#auto-process').is(':checked')) {
+                    this.processExtractedText();
+                }
+            } else {
+                console.log('No text extracted from PDF');
+                alert('No text could be extracted from this PDF. Try another document or page.');
+            }
+        } catch (error) {
+            console.error('Error extracting text from PDF on click:', error);
+            alert('Error extracting text from PDF: ' + error.message);
+        }
+    }
+    
     setupIframeInteractions(iframe) {
         try {
-            // Add click event listener to the iframe
-            iframe.contentDocument.addEventListener('click', async (e) => {
-                // Extract text at click position
-                const text = await this.extractTextAtPosition(e.clientX, e.clientY, iframe);
-                
-                if (text && text.trim().length > 0) {
-                    this.extractedText = text;
-                    
-                    // Display the extracted text
-                    $('#original-text').text(text);
-                    $('#processed-text').empty();
-                    
-                    // Show the processing overlay
-                    $('#processing-overlay').css('display', 'flex');
-                    
-                    // Process the text if auto-process is enabled
-                    if ($('#auto-process').is(':checked')) {
-                        this.processExtractedText();
-                    }
-                }
-            });
+            console.log('Setting up iframe interactions');
             
-            console.log('Iframe interactions set up successfully');
+            // If iframe is not provided, get it from the DOM
+            if (!iframe) {
+                iframe = document.getElementById('document-iframe');
+            }
+            
+            if (!iframe) {
+                console.error('Iframe not available');
+                return;
+            }
+            
+            // For PDF files, we need a different approach since we can't directly access the PDF content
+            if (this.pdfUrl && (this.pdfUrl.includes('.pdf') || this.pdfUrl.endsWith('.pdf'))) {
+                console.log('Setting up PDF iframe interactions');
+                
+                // Add click event listener to the iframe element itself
+                iframe.addEventListener('click', async (e) => {
+                    console.log('PDF iframe clicked at position:', e.clientX, e.clientY);
+                    this.handlePdfClick(e);
+                });
+                
+                console.log('PDF iframe click handler set up');
+            } else {
+                // For HTML content, we can use the contentDocument
+                console.log('Setting up HTML iframe interactions');
+                
+                if (iframe.contentDocument) {
+                    // Add click event listener to the iframe's content document
+                    iframe.contentDocument.addEventListener('click', async (e) => {
+                        console.log('HTML iframe clicked at position:', e.clientX, e.clientY);
+                        
+                        // Extract text at click position
+                        const text = await this.extractTextAtPosition(e.clientX, e.clientY, iframe);
+                        
+                        if (text && text.trim().length > 0) {
+                            console.log('Extracted text:', text.substring(0, 50) + '...');
+                            this.extractedText = text;
+                            
+                            // Display the extracted text
+                            $('#original-text').text(text);
+                            $('#processed-text').empty();
+                            
+                            // Show the processing overlay
+                            $('#processing-overlay').css('display', 'flex');
+                            
+                            // Process the text if auto-process is enabled
+                            if ($('#auto-process').is(':checked')) {
+                                this.processExtractedText();
+                            }
+                        } else {
+                            console.log('No text extracted at click position');
+                        }
+                    });
+                    
+                    console.log('HTML iframe interactions set up successfully');
+                } else {
+                    console.error('Iframe contentDocument not available for HTML content');
+                }
+            }
         } catch (error) {
             console.error('Error setting up iframe interactions:', error);
         }
@@ -233,30 +433,96 @@ class LLMReader {
     
     async extractTextAtPosition(x, y, iframe) {
         try {
+            // If iframe is not provided, get it from the DOM
+            if (!iframe) {
+                iframe = document.getElementById('document-iframe');
+            }
+            
+            if (!iframe || !iframe.contentDocument) {
+                console.error('Iframe or contentDocument not available for text extraction');
+                return '';
+            }
+            
             // For PDF files, we need to use PDF.js to extract text
-            if (this.pdfUrl && this.pdfUrl.includes('.pdf')) {
-                // This is a simplified approach - in a real implementation,
-                // you would need to convert iframe coordinates to PDF coordinates
-                // and extract the specific paragraph or section at that position
+            if (this.pdfUrl && (this.pdfUrl.includes('.pdf') || this.pdfUrl.endsWith('.pdf'))) {
+                console.log('Extracting text from PDF at URL:', this.pdfUrl);
                 
-                // For now, we'll just extract text from the current visible page
-                const pdf = await pdfjsLib.getDocument(this.pdfUrl).promise;
-                const page = await pdf.getPage(1); // Get the first page
-                const textContent = await page.getTextContent();
-                
-                // Find text near the click position
-                // This is a simplified approach - in a real implementation,
-                // you would need to use the position information to find the exact text
-                
-                // For now, just return all text from the page
-                return textContent.items.map(item => item.str).join(' ');
+                try {
+                    // Create a new PDF.js task to load the PDF directly
+                    // This bypasses any cross-origin issues that might occur when trying to access the PDF through the iframe
+                    let pdfUrl = this.pdfUrl;
+                    
+                    // If it's a blob URL (from file upload), we need to handle it differently
+                    if (pdfUrl.startsWith('blob:')) {
+                        console.log('Using blob URL directly');
+                    } else {
+                        // For remote URLs, we might need to use a proxy or CORS-enabled endpoint
+                        console.log('Using remote URL');
+                    }
+                    
+                    // Load the PDF document
+                    const loadingTask = pdfjsLib.getDocument(pdfUrl);
+                    const pdf = await loadingTask.promise;
+                    console.log('PDF loaded with', pdf.numPages, 'pages');
+                    
+                    // Get the first page
+                    const page = await pdf.getPage(1);
+                    
+                    // Extract text content
+                    const textContent = await page.getTextContent();
+                    console.log('Extracted', textContent.items.length, 'text items from PDF');
+                    
+                    // For a more sophisticated implementation, you would:
+                    // 1. Convert iframe click coordinates to PDF coordinates
+                    // 2. Find text items near those coordinates
+                    // 3. Extract the relevant paragraph or section
+                    
+                    // For now, just return all text from the page
+                    const extractedText = textContent.items.map(item => item.str).join(' ');
+                    
+                    // If we got no text, try to get text from all pages
+                    if (!extractedText.trim()) {
+                        console.log('No text found on first page, trying all pages');
+                        let allText = '';
+                        
+                        // Try to get text from the first 3 pages (to avoid too much processing)
+                        const maxPages = Math.min(3, pdf.numPages);
+                        for (let i = 1; i <= maxPages; i++) {
+                            const pageObj = await pdf.getPage(i);
+                            const pageTextContent = await pageObj.getTextContent();
+                            allText += pageTextContent.items.map(item => item.str).join(' ') + ' ';
+                        }
+                        
+                        return allText.trim();
+                    }
+                    
+                    return extractedText;
+                } catch (pdfError) {
+                    console.error('Error extracting text from PDF:', pdfError);
+                    
+                    // Try an alternative approach - get text from the iframe directly
+                    try {
+                        console.log('Trying alternative text extraction method');
+                        const iframeText = iframe.contentDocument.body.textContent;
+                        if (iframeText && iframeText.trim().length > 0) {
+                            return iframeText.trim();
+                        }
+                    } catch (iframeError) {
+                        console.error('Alternative extraction also failed:', iframeError);
+                    }
+                    
+                    return 'Error extracting text from PDF: ' + pdfError.message;
+                }
             } else {
                 // For HTML content, we can use the DOM to extract text
+                console.log('Extracting text from HTML at position:', x, y);
+                
                 const element = iframe.contentDocument.elementFromPoint(x, y);
                 if (element) {
                     // Try to get the paragraph or section containing the clicked element
                     const container = this.findTextContainer(element);
-                    return container ? container.textContent.trim() : element.textContent.trim();
+                    const text = container ? container.textContent.trim() : element.textContent.trim();
+                    return text;
                 }
             }
             
@@ -560,6 +826,119 @@ class LLMReader {
         if (this.metrics.startTime) {
             const readingTime = Math.round((Date.now() - this.metrics.startTime) / 1000);
             $('#reading-time').text(readingTime);
+        }
+    }
+    
+    applyDimming() {
+        try {
+            const iframe = document.getElementById('document-iframe');
+            if (!iframe || !iframe.contentDocument) {
+                return;
+            }
+            
+            // Get all paragraphs in the document
+            const paragraphs = iframe.contentDocument.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6, blockquote, div, section, article');
+            
+            // Apply dimming to all paragraphs that haven't been read
+            paragraphs.forEach((paragraph, index) => {
+                if (!this.readParagraphs.has(index)) {
+                    paragraph.style.opacity = '0.5';
+                    paragraph.style.transition = 'opacity 0.3s ease';
+                    
+                    // Add click handler to restore opacity when clicked
+                    paragraph.addEventListener('click', () => {
+                        paragraph.style.opacity = '1';
+                        this.readParagraphs.add(index);
+                    });
+                }
+            });
+        } catch (error) {
+            console.error('Error applying dimming:', error);
+        }
+    }
+    
+    removeDimming() {
+        try {
+            const iframe = document.getElementById('document-iframe');
+            if (!iframe || !iframe.contentDocument) {
+                return;
+            }
+            
+            // Get all paragraphs in the document
+            const paragraphs = iframe.contentDocument.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6, blockquote, div, section, article');
+            
+            // Remove dimming from all paragraphs
+            paragraphs.forEach(paragraph => {
+                paragraph.style.opacity = '1';
+            });
+        } catch (error) {
+            console.error('Error removing dimming:', error);
+        }
+    }
+    
+    async openAssessment() {
+        if (!this.extractedText || this.extractedText.trim().length === 0) {
+            alert('No text to assess');
+            return;
+        }
+        
+        // Get model and API key
+        const apiKey = $('#api-key').val();
+        const model = $('#model').val();
+        
+        if (!apiKey) {
+            alert('API key is required for assessment');
+            return;
+        }
+        
+        try {
+            // Show loading indicator
+            const assessmentDiv = $('<div class="assessment"></div>');
+            assessmentDiv.html('<div class="loading" style="margin: 0 auto;"></div>');
+            $('#processed-text').after(assessmentDiv);
+            assessmentDiv.show();
+            
+            // Construct prompt for assessment
+            const prompt = `Please analyze the following text and provide a brief assessment of its:
+1. Reading level (elementary, middle school, high school, college, graduate)
+2. Main topics and key points
+3. Complexity (vocabulary, sentence structure)
+4. Tone and style
+
+Text to analyze:
+${this.extractedText}`;
+            
+            // Call appropriate LLM API based on model selection
+            let response;
+            
+            switch (model) {
+                case 'gpt-4':
+                case 'gpt-3.5-turbo':
+                    response = await this.callOpenAI(prompt, apiKey, model);
+                    break;
+                case 'claude-3':
+                    response = await this.callClaude(prompt, apiKey);
+                    break;
+                case 'gemini-pro':
+                    response = await this.callGemini(prompt, apiKey);
+                    break;
+                default:
+                    throw new Error(`Unsupported model: ${model}`);
+            }
+            
+            // Display assessment
+            assessmentDiv.html(`<h4>Text Assessment</h4><div>${response}</div>`);
+            
+            // Send metrics to LRS if tracking is enabled
+            if ($('#track-metrics').is(':checked')) {
+                this.sendToLRS({
+                    action: 'assessed',
+                    text: this.extractedText.substring(0, 100) + '...'
+                });
+            }
+        } catch (error) {
+            console.error('Error generating assessment:', error);
+            alert('Error generating assessment: ' + error.message);
         }
     }
 }
