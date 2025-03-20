@@ -425,21 +425,48 @@ async function callOpenAI(prompt, model, stream = false, onChunk = null) {
       
       let fullText = '';
       
+      // Buffer to accumulate incomplete JSON data
+      let buffer = '';
+      
       response.data.on('data', (chunk) => {
-        const lines = chunk.toString().split('\n').filter(line => line.trim() !== '');
-        for (const line of lines) {
+        // Add the new chunk to our buffer
+        const chunkStr = chunk.toString();
+        buffer += chunkStr;
+        
+        // Process complete lines from the buffer
+        let newlineIndex;
+        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+          // Extract a complete line
+          const line = buffer.substring(0, newlineIndex).trim();
+          buffer = buffer.substring(newlineIndex + 1);
+          
+          // Skip empty lines
+          if (!line) continue;
+          
+          // Check for end of stream
           if (line.includes('[DONE]')) return;
           
+          // Process data lines
           if (line.startsWith('data:')) {
             try {
-              const data = JSON.parse(line.substring(5));
+              // Extract the JSON part
+              const jsonStr = line.substring(5).trim();
+              if (!jsonStr || jsonStr === '') continue;
+              
+              // Try to parse the JSON
+              const data = JSON.parse(jsonStr);
+              
+              // Extract content if available
               if (data.choices && data.choices[0].delta && data.choices[0].delta.content) {
                 const content = data.choices[0].delta.content;
                 fullText += content;
                 onChunk(content);
               }
             } catch (e) {
-              console.error('Error parsing streaming data:', e);
+              // Log the error but don't throw - we'll try again with more data
+              console.error('Error parsing streaming data:', e.message);
+              // Don't add the problematic line back to the buffer
+              continue;
             }
           }
         }
@@ -516,19 +543,45 @@ async function callClaude(prompt, model = 'claude-3-sonnet-20240229', stream = f
       
       let fullText = '';
       
+      // Buffer to accumulate incomplete JSON data
+      let buffer = '';
+      
       response.data.on('data', (chunk) => {
-        const lines = chunk.toString().split('\n').filter(line => line.trim() !== '');
-        for (const line of lines) {
+        // Add the new chunk to our buffer
+        const chunkStr = chunk.toString();
+        buffer += chunkStr;
+        
+        // Process complete lines from the buffer
+        let newlineIndex;
+        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+          // Extract a complete line
+          const line = buffer.substring(0, newlineIndex).trim();
+          buffer = buffer.substring(newlineIndex + 1);
+          
+          // Skip empty lines
+          if (!line) continue;
+          
+          // Process data lines
           if (line.startsWith('data:')) {
             try {
-              const data = JSON.parse(line.substring(5));
+              // Extract the JSON part
+              const jsonStr = line.substring(5).trim();
+              if (!jsonStr || jsonStr === '') continue;
+              
+              // Try to parse the JSON
+              const data = JSON.parse(jsonStr);
+              
+              // Extract content if available
               if (data.type === 'content_block_delta' && data.delta && data.delta.text) {
                 const content = data.delta.text;
                 fullText += content;
                 onChunk(content);
               }
             } catch (e) {
-              console.error('Error parsing streaming data:', e);
+              // Log the error but don't throw - we'll try again with more data
+              console.error('Error parsing streaming data:', e.message);
+              // Don't add the problematic line back to the buffer
+              continue;
             }
           }
         }
@@ -590,21 +643,48 @@ async function callOpenAIChatAPI(conversation, model, stream = false, onChunk = 
       
       let fullText = '';
       
+      // Buffer to accumulate incomplete JSON data
+      let buffer = '';
+      
       response.data.on('data', (chunk) => {
-        const lines = chunk.toString().split('\n').filter(line => line.trim() !== '');
-        for (const line of lines) {
+        // Add the new chunk to our buffer
+        const chunkStr = chunk.toString();
+        buffer += chunkStr;
+        
+        // Process complete lines from the buffer
+        let newlineIndex;
+        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+          // Extract a complete line
+          const line = buffer.substring(0, newlineIndex).trim();
+          buffer = buffer.substring(newlineIndex + 1);
+          
+          // Skip empty lines
+          if (!line) continue;
+          
+          // Check for end of stream
           if (line.includes('[DONE]')) return;
           
+          // Process data lines
           if (line.startsWith('data:')) {
             try {
-              const data = JSON.parse(line.substring(5));
+              // Extract the JSON part
+              const jsonStr = line.substring(5).trim();
+              if (!jsonStr || jsonStr === '') continue;
+              
+              // Try to parse the JSON
+              const data = JSON.parse(jsonStr);
+              
+              // Extract content if available
               if (data.choices && data.choices[0].delta && data.choices[0].delta.content) {
                 const content = data.choices[0].delta.content;
                 fullText += content;
                 onChunk(content);
               }
             } catch (e) {
-              console.error('Error parsing streaming data:', e);
+              // Log the error but don't throw - we'll try again with more data
+              console.error('Error parsing streaming data:', e.message);
+              // Don't add the problematic line back to the buffer
+              continue;
             }
           }
         }
@@ -676,19 +756,45 @@ async function callClaudeChatAPI(conversation, model, stream = false, onChunk = 
       
       let fullText = '';
       
+      // Buffer to accumulate incomplete JSON data
+      let buffer = '';
+      
       response.data.on('data', (chunk) => {
-        const lines = chunk.toString().split('\n').filter(line => line.trim() !== '');
-        for (const line of lines) {
+        // Add the new chunk to our buffer
+        const chunkStr = chunk.toString();
+        buffer += chunkStr;
+        
+        // Process complete lines from the buffer
+        let newlineIndex;
+        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+          // Extract a complete line
+          const line = buffer.substring(0, newlineIndex).trim();
+          buffer = buffer.substring(newlineIndex + 1);
+          
+          // Skip empty lines
+          if (!line) continue;
+          
+          // Process data lines
           if (line.startsWith('data:')) {
             try {
-              const data = JSON.parse(line.substring(5));
+              // Extract the JSON part
+              const jsonStr = line.substring(5).trim();
+              if (!jsonStr || jsonStr === '') continue;
+              
+              // Try to parse the JSON
+              const data = JSON.parse(jsonStr);
+              
+              // Extract content if available
               if (data.type === 'content_block_delta' && data.delta && data.delta.text) {
                 const content = data.delta.text;
                 fullText += content;
                 onChunk(content);
               }
             } catch (e) {
-              console.error('Error parsing streaming data:', e);
+              // Log the error but don't throw - we'll try again with more data
+              console.error('Error parsing streaming data:', e.message);
+              // Don't add the problematic line back to the buffer
+              continue;
             }
           }
         }
@@ -745,16 +851,71 @@ async function callGeminiChatAPI(conversation, model, stream = false, onChunk = 
       
       let fullText = '';
       
+      // Buffer to accumulate incomplete JSON data
+      let buffer = '';
+      
       response.data.on('data', (chunk) => {
+        // Add the new chunk to our buffer
+        const chunkStr = chunk.toString();
+        buffer += chunkStr;
+        
+        // For Gemini, we need to handle the case where each chunk might be a complete JSON object
+        // Try to parse the buffer as a complete JSON object first
         try {
-          const data = JSON.parse(chunk.toString());
-          if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
-            const content = data.candidates[0].content.parts[0].text;
-            fullText += content;
-            onChunk(content);
+          if (buffer.trim()) {
+            const data = JSON.parse(buffer);
+            if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
+              const content = data.candidates[0].content.parts[0].text;
+              fullText += content;
+              onChunk(content);
+            }
+            // Clear the buffer after successful parsing
+            buffer = '';
           }
         } catch (e) {
-          console.error('Error parsing streaming data:', e);
+          // If parsing as a complete object fails, try to find complete JSON objects in the buffer
+          // This is a simplified approach - in a real implementation, you might need more sophisticated JSON parsing
+          try {
+            // Look for a complete JSON object with matching braces
+            let openBraces = 0;
+            let startPos = -1;
+            let endPos = -1;
+            
+            for (let i = 0; i < buffer.length; i++) {
+              if (buffer[i] === '{') {
+                if (openBraces === 0) {
+                  startPos = i;
+                }
+                openBraces++;
+              } else if (buffer[i] === '}') {
+                openBraces--;
+                if (openBraces === 0 && startPos !== -1) {
+                  endPos = i + 1;
+                  const jsonStr = buffer.substring(startPos, endPos);
+                  try {
+                    const data = JSON.parse(jsonStr);
+                    if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
+                      const content = data.candidates[0].content.parts[0].text;
+                      fullText += content;
+                      onChunk(content);
+                    }
+                  } catch (innerError) {
+                    // If parsing fails, just continue
+                    console.error('Error parsing JSON object:', innerError.message);
+                  }
+                  // Remove the processed part from the buffer
+                  buffer = buffer.substring(endPos);
+                  // Reset for next object
+                  startPos = -1;
+                  endPos = -1;
+                  i = -1; // Start over with the new buffer
+                }
+              }
+            }
+          } catch (outerError) {
+            // If the more sophisticated parsing fails, just keep the buffer for the next chunk
+            console.error('Error processing buffer:', outerError.message);
+          }
         }
       });
       
@@ -816,16 +977,71 @@ async function callGemini(prompt, model = 'gemini-pro', stream = false, onChunk 
       
       let fullText = '';
       
+      // Buffer to accumulate incomplete JSON data
+      let buffer = '';
+      
       response.data.on('data', (chunk) => {
+        // Add the new chunk to our buffer
+        const chunkStr = chunk.toString();
+        buffer += chunkStr;
+        
+        // For Gemini, we need to handle the case where each chunk might be a complete JSON object
+        // Try to parse the buffer as a complete JSON object first
         try {
-          const data = JSON.parse(chunk.toString());
-          if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
-            const content = data.candidates[0].content.parts[0].text;
-            fullText += content;
-            onChunk(content);
+          if (buffer.trim()) {
+            const data = JSON.parse(buffer);
+            if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
+              const content = data.candidates[0].content.parts[0].text;
+              fullText += content;
+              onChunk(content);
+            }
+            // Clear the buffer after successful parsing
+            buffer = '';
           }
         } catch (e) {
-          console.error('Error parsing streaming data:', e);
+          // If parsing as a complete object fails, try to find complete JSON objects in the buffer
+          // This is a simplified approach - in a real implementation, you might need more sophisticated JSON parsing
+          try {
+            // Look for a complete JSON object with matching braces
+            let openBraces = 0;
+            let startPos = -1;
+            let endPos = -1;
+            
+            for (let i = 0; i < buffer.length; i++) {
+              if (buffer[i] === '{') {
+                if (openBraces === 0) {
+                  startPos = i;
+                }
+                openBraces++;
+              } else if (buffer[i] === '}') {
+                openBraces--;
+                if (openBraces === 0 && startPos !== -1) {
+                  endPos = i + 1;
+                  const jsonStr = buffer.substring(startPos, endPos);
+                  try {
+                    const data = JSON.parse(jsonStr);
+                    if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
+                      const content = data.candidates[0].content.parts[0].text;
+                      fullText += content;
+                      onChunk(content);
+                    }
+                  } catch (innerError) {
+                    // If parsing fails, just continue
+                    console.error('Error parsing JSON object:', innerError.message);
+                  }
+                  // Remove the processed part from the buffer
+                  buffer = buffer.substring(endPos);
+                  // Reset for next object
+                  startPos = -1;
+                  endPos = -1;
+                  i = -1; // Start over with the new buffer
+                }
+              }
+            }
+          } catch (outerError) {
+            // If the more sophisticated parsing fails, just keep the buffer for the next chunk
+            console.error('Error processing buffer:', outerError.message);
+          }
         }
       });
       

@@ -48,17 +48,17 @@ class PDFHandler {
                 // Show the processing overlay
                 $('#processing-overlay').css('display', 'flex');
                 
-            // Process the text if auto-process is enabled
-            if ($('#auto-process').is(':checked')) {
-                this.reader.llmHandler.processExtractedText(event.data.text);
-            }
-            
-            // Add a button to send text to the assessment URL
-            const sendToAssessmentBtn = $('<button class="btn btn-secondary mt-2">Send to Assessment</button>');
-            sendToAssessmentBtn.on('click', () => {
-                this.reader.llmHandler.sendTextToAssessment(event.data.text);
-            });
-            $('#processing-controls').append(sendToAssessmentBtn);
+                // Process the text if auto-process is enabled
+                if ($('#auto-process').is(':checked')) {
+                    this.reader.llmHandler.processExtractedText(event.data.text);
+                }
+                
+                // Add a button to send text to the assessment URL
+                const sendToAssessmentBtn = $('<button class="btn btn-secondary mt-2">Send to Assessment</button>');
+                sendToAssessmentBtn.on('click', () => {
+                    this.reader.llmHandler.sendTextToAssessment(event.data.text);
+                });
+                $('#processing-controls').append(sendToAssessmentBtn);
             }
         }
     }
