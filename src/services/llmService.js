@@ -188,9 +188,11 @@ exports.processText = async (text, readingLevel, language, style, model, stream 
  * @param {string} model - The LLM model to use
  * @param {string} provider - The LLM provider to use
  * @param {string} sessionId - Unique identifier for the session
+ * @param {boolean} stream - Whether to stream the response
+ * @param {function} onChunk - Callback for streaming chunks
  * @returns {Promise<Object>} - The response message and metrics
  */
-exports.processChat = async (message, conversation, model, provider, sessionId = 'default') => {
+exports.processChat = async (message, conversation, model, provider, sessionId = 'default', stream = false, onChunk = null) => {
   // Determine provider based on model if not explicitly provided
   if (!provider) {
     if (model.startsWith('gpt-')) {
@@ -239,8 +241,12 @@ exports.processChat = async (message, conversation, model, provider, sessionId =
       // Count tokens in prompt
       promptTokens = countTokens(JSON.stringify(formattedConversation), provider, model);
       
-      // Call OpenAI API
-      responseMessage = await callOpenAIChatAPI(formattedConversation, model);
+      // Call OpenAI API with streaming if requested
+      if (stream && onChunk) {
+        responseMessage = await callOpenAIChatAPI(formattedConversation, model, true, onChunk);
+      } else {
+        responseMessage = await callOpenAIChatAPI(formattedConversation, model);
+      }
       break;
       
     case 'anthropic':
@@ -253,8 +259,12 @@ exports.processChat = async (message, conversation, model, provider, sessionId =
       // Count tokens in prompt
       promptTokens = countTokens(JSON.stringify(formattedConversation), provider, model);
       
-      // Call Claude API
-      responseMessage = await callClaudeChatAPI(formattedConversation, model);
+      // Call Claude API with streaming if requested
+      if (stream && onChunk) {
+        responseMessage = await callClaudeChatAPI(formattedConversation, model, true, onChunk);
+      } else {
+        responseMessage = await callClaudeChatAPI(formattedConversation, model);
+      }
       break;
       
     case 'google':
@@ -267,8 +277,12 @@ exports.processChat = async (message, conversation, model, provider, sessionId =
       // Count tokens in prompt
       promptTokens = countTokens(JSON.stringify(formattedConversation), provider, model);
       
-      // Call Gemini API
-      responseMessage = await callGeminiChatAPI(formattedConversation, model);
+      // Call Gemini API with streaming if requested
+      if (stream && onChunk) {
+        responseMessage = await callGeminiChatAPI(formattedConversation, model, true, onChunk);
+      } else {
+        responseMessage = await callGeminiChatAPI(formattedConversation, model);
+      }
       break;
       
     default:
@@ -545,14 +559,17 @@ async function callClaude(prompt, model = 'claude-3-sonnet-20240229', stream = f
  * Call OpenAI Chat API
  * @param {Array} conversation - The conversation history
  * @param {string} model - The model to use
+ * @param {boolean} stream - Whether to stream the response
+ * @param {function} onChunk - Callback for streaming chunks
  * @returns {Promise<string>} - The response text
  */
-async function callOpenAIChatAPI(conversation, model) {
+async function callOpenAIChatAPI(conversation, model, stream = false, onChunk = null) {
   try {
     const requestBody = {
       model: model,
       messages: conversation,
-      temperature: 0.7
+      temperature: 0.7,
+      stream: stream
     };
     
     const headers = {
@@ -560,13 +577,54 @@ async function callOpenAIChatAPI(conversation, model) {
       'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
     };
     
-    const response = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
-      requestBody,
-      { headers }
-    );
-    
-    return response.data.choices[0].message.content;
+    if (stream && onChunk) {
+      // For streaming responses
+      const response = await axios.post(
+        'https://api.openai.com/v1/chat/completions',
+        requestBody,
+        {
+          headers,
+          responseType: 'stream'
+        }
+      );
+      
+      let fullText = '';
+      
+      response.data.on('data', (chunk) => {
+        const lines = chunk.toString().split('\n').filter(line => line.trim() !== '');
+        for (const line of lines) {
+          if (line.includes('[DONE]')) return;
+          
+          if (line.startsWith('data:')) {
+            try {
+              const data = JSON.parse(line.substring(5));
+              if (data.choices && data.choices[0].delta && data.choices[0].delta.content) {
+                const content = data.choices[0].delta.content;
+                fullText += content;
+                onChunk(content);
+              }
+            } catch (e) {
+              console.error('Error parsing streaming data:', e);
+            }
+          }
+        }
+      });
+      
+      return new Promise((resolve) => {
+        response.data.on('end', () => {
+          resolve(fullText);
+        });
+      });
+    } else {
+      // For non-streaming responses
+      const response = await axios.post(
+        'https://api.openai.com/v1/chat/completions',
+        requestBody,
+        { headers }
+      );
+      
+      return response.data.choices[0].message.content;
+    }
   } catch (error) {
     console.error('OpenAI Chat API error:', error.response?.data || error.message);
     throw new Error(`OpenAI Chat API error: ${error.response?.data?.error?.message || error.message}`);
@@ -577,9 +635,11 @@ async function callOpenAIChatAPI(conversation, model) {
  * Call Claude Chat API
  * @param {Array} conversation - The conversation history
  * @param {string} model - The model to use
+ * @param {boolean} stream - Whether to stream the response
+ * @param {function} onChunk - Callback for streaming chunks
  * @returns {Promise<string>} - The response text
  */
-async function callClaudeChatAPI(conversation, model) {
+async function callClaudeChatAPI(conversation, model, stream = false, onChunk = null) {
   try {
     // Map model names to actual Claude model identifiers
     const modelMap = {
@@ -593,7 +653,8 @@ async function callClaudeChatAPI(conversation, model) {
     const requestBody = {
       model: claudeModel,
       max_tokens: 1000,
-      messages: conversation
+      messages: conversation,
+      stream: stream
     };
     
     const headers = {
@@ -602,13 +663,52 @@ async function callClaudeChatAPI(conversation, model) {
       'anthropic-version': '2023-06-01'
     };
     
-    const response = await axios.post(
-      'https://api.anthropic.com/v1/messages',
-      requestBody,
-      { headers }
-    );
-    
-    return response.data.content[0].text;
+    if (stream && onChunk) {
+      // For streaming responses
+      const response = await axios.post(
+        'https://api.anthropic.com/v1/messages',
+        requestBody,
+        {
+          headers,
+          responseType: 'stream'
+        }
+      );
+      
+      let fullText = '';
+      
+      response.data.on('data', (chunk) => {
+        const lines = chunk.toString().split('\n').filter(line => line.trim() !== '');
+        for (const line of lines) {
+          if (line.startsWith('data:')) {
+            try {
+              const data = JSON.parse(line.substring(5));
+              if (data.type === 'content_block_delta' && data.delta && data.delta.text) {
+                const content = data.delta.text;
+                fullText += content;
+                onChunk(content);
+              }
+            } catch (e) {
+              console.error('Error parsing streaming data:', e);
+            }
+          }
+        }
+      });
+      
+      return new Promise((resolve) => {
+        response.data.on('end', () => {
+          resolve(fullText);
+        });
+      });
+    } else {
+      // For non-streaming responses
+      const response = await axios.post(
+        'https://api.anthropic.com/v1/messages',
+        requestBody,
+        { headers }
+      );
+      
+      return response.data.content[0].text;
+    }
   } catch (error) {
     console.error('Claude Chat API error:', error.response?.data || error.message);
     throw new Error(`Claude Chat API error: ${error.response?.data?.error?.message || error.message}`);
@@ -619,9 +719,11 @@ async function callClaudeChatAPI(conversation, model) {
  * Call Gemini Chat API
  * @param {Array} conversation - The conversation history
  * @param {string} model - The model to use
+ * @param {boolean} stream - Whether to stream the response
+ * @param {function} onChunk - Callback for streaming chunks
  * @returns {Promise<string>} - The response text
  */
-async function callGeminiChatAPI(conversation, model) {
+async function callGeminiChatAPI(conversation, model, stream = false, onChunk = null) {
   try {
     const requestBody = {
       contents: conversation,
@@ -631,12 +733,45 @@ async function callGeminiChatAPI(conversation, model) {
       }
     };
     
-    const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      requestBody
-    );
-    
-    return response.data.candidates[0].content.parts[0].text;
+    if (stream && onChunk) {
+      // For streaming responses
+      const response = await axios.post(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${process.env.GEMINI_API_KEY}`,
+        requestBody,
+        {
+          responseType: 'stream'
+        }
+      );
+      
+      let fullText = '';
+      
+      response.data.on('data', (chunk) => {
+        try {
+          const data = JSON.parse(chunk.toString());
+          if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
+            const content = data.candidates[0].content.parts[0].text;
+            fullText += content;
+            onChunk(content);
+          }
+        } catch (e) {
+          console.error('Error parsing streaming data:', e);
+        }
+      });
+      
+      return new Promise((resolve) => {
+        response.data.on('end', () => {
+          resolve(fullText);
+        });
+      });
+    } else {
+      // For non-streaming responses
+      const response = await axios.post(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+        requestBody
+      );
+      
+      return response.data.candidates[0].content.parts[0].text;
+    }
   } catch (error) {
     console.error('Gemini Chat API error:', error.response?.data || error.message);
     throw new Error(`Gemini Chat API error: ${error.response?.data?.error?.message || error.message}`);

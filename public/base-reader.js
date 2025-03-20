@@ -103,10 +103,8 @@ class LLMReader {
             this.llmHandler.processExtractedText(this.extractedText);
         });
         
-        // Assessment button
-        $('#assessment-button').on('click', () => {
-            this.llmHandler.openAssessment(this.extractedText);
-        });
+        // We've removed the assessment button from the UI and replaced it with a dynamic button
+        // that's added by the PDF and HTML handlers when text is selected
         
         // Document iframe click handler
         $('#document-iframe').on('load', () => {
@@ -157,6 +155,78 @@ class LLMReader {
             const url = $('#html-url-input').val().trim();
             if (url) {
                 this.htmlHandler.loadHtmlFromUrl(url);
+            }
+        });
+        
+        // Extract PDF text button
+        $('#extract-pdf-text-btn').on('click', async () => {
+            console.log('Extract PDF text button clicked');
+            if (this.documentType === 'pdf' && this.pdfUrl) {
+                try {
+                    // Extract text from the PDF
+                    const text = await this.pdfHandler.extractTextFromPdf();
+                    
+                    if (text && text.trim().length > 0) {
+                        console.log('Extracted text from PDF button:', text.substring(0, 50) + '...');
+                        this.extractedText = text;
+                        
+                        // Display the extracted text
+                        $('#original-text').text(text);
+                        $('#processed-text').empty();
+                        
+                        // Show the processing overlay
+                        $('#processing-overlay').css('display', 'flex');
+                        
+                        // Process the text if auto-process is enabled
+                        if ($('#auto-process').is(':checked')) {
+                            this.llmHandler.processExtractedText(text);
+                        }
+                    } else {
+                        console.log('No text extracted from PDF');
+                        alert('No text could be extracted from this PDF. Try another document or page.');
+                    }
+                } catch (error) {
+                    console.error('Error extracting text from PDF:', error);
+                    alert('Error extracting text from PDF: ' + error.message);
+                }
+            } else {
+                alert('Please load a PDF document first.');
+            }
+        });
+        
+        // Extract HTML text button
+        $('#extract-html-text-btn').on('click', async () => {
+            console.log('Extract HTML text button clicked');
+            if (this.documentType === 'html') {
+                try {
+                    // Extract all text from the HTML document
+                    const text = this.htmlHandler.extractAllText();
+                    
+                    if (text && text.trim().length > 0) {
+                        console.log('Extracted text from HTML button:', text.substring(0, 50) + '...');
+                        this.extractedText = text;
+                        
+                        // Display the extracted text
+                        $('#original-text').text(text);
+                        $('#processed-text').empty();
+                        
+                        // Show the processing overlay
+                        $('#processing-overlay').css('display', 'flex');
+                        
+                        // Process the text if auto-process is enabled
+                        if ($('#auto-process').is(':checked')) {
+                            this.llmHandler.processExtractedText(text);
+                        }
+                    } else {
+                        console.log('No text extracted from HTML');
+                        alert('No text could be extracted from this HTML document. Try another document.');
+                    }
+                } catch (error) {
+                    console.error('Error extracting text from HTML:', error);
+                    alert('Error extracting text from HTML: ' + error.message);
+                }
+            } else {
+                alert('Please load an HTML document first.');
             }
         });
     }

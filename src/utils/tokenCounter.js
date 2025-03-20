@@ -3,7 +3,7 @@
  * Provides functions to count tokens for different LLM providers
  */
 
-const { Tiktoken } = require('js-tiktoken');
+const tiktoken = require('js-tiktoken');
 
 // Cache for encoders to avoid recreating them
 const encoderCache = {};
@@ -26,22 +26,27 @@ function countOpenAITokens(text, model) {
     const textStr = String(text);
     
     // Determine encoding based on model
-    let encoding = 'cl100k_base'; // Default for newer models
+    let encodingName = 'cl100k_base'; // Default for newer models
     
-    if (model.includes('gpt-3.5-turbo')) {
-      encoding = 'cl100k_base';
-    } else if (model.includes('gpt-4')) {
-      encoding = 'cl100k_base';
-    } else if (model.includes('text-davinci')) {
-      encoding = 'p50k_base';
+    if (model && model.includes('gpt-3.5-turbo')) {
+      encodingName = 'cl100k_base';
+    } else if (model && model.includes('gpt-4')) {
+      encodingName = 'cl100k_base';
+    } else if (model && model.includes('text-davinci')) {
+      encodingName = 'p50k_base';
     }
     
     // Get or create encoder
-    if (!encoderCache[encoding]) {
-      encoderCache[encoding] = new Tiktoken(encoding);
+    if (!encoderCache[encodingName]) {
+      try {
+        encoderCache[encodingName] = tiktoken.getEncoding(encodingName);
+      } catch (encError) {
+        console.warn(`Failed to get encoding ${encodingName}, falling back to approximation`, encError);
+        return approximateTokenCount(textStr);
+      }
     }
     
-    const encoder = encoderCache[encoding];
+    const encoder = encoderCache[encodingName];
     const tokens = encoder.encode(textStr);
     
     return tokens.length;
@@ -71,7 +76,12 @@ function countClaudeTokens(text) {
     const textStr = String(text);
     
     if (!encoderCache['cl100k_base']) {
-      encoderCache['cl100k_base'] = new Tiktoken('cl100k_base');
+      try {
+        encoderCache['cl100k_base'] = tiktoken.getEncoding('cl100k_base');
+      } catch (encError) {
+        console.warn('Failed to get encoding for Claude tokens, falling back to approximation', encError);
+        return approximateTokenCount(textStr);
+      }
     }
     
     const encoder = encoderCache['cl100k_base'];
@@ -102,7 +112,12 @@ function countGeminiTokens(text) {
     const textStr = String(text);
     
     if (!encoderCache['cl100k_base']) {
-      encoderCache['cl100k_base'] = new Tiktoken('cl100k_base');
+      try {
+        encoderCache['cl100k_base'] = tiktoken.getEncoding('cl100k_base');
+      } catch (encError) {
+        console.warn('Failed to get encoding for Gemini tokens, falling back to approximation', encError);
+        return approximateTokenCount(textStr);
+      }
     }
     
     const encoder = encoderCache['cl100k_base'];

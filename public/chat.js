@@ -88,7 +88,7 @@ class LLMChat {
         this.processWithLLM(messageText);
     }
     
-    async processWithLLM(messageText) {
+    processWithLLM(messageText) {
         try {
             this.isProcessing = true;
             
@@ -102,39 +102,105 @@ class LLMChat {
                 content: msg.content
             }));
             
-            // Send to server
-            const response = await $.ajax({
-                url: '/api/chat',
-                type: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({
+            // Record start time for latency measurement
+            const startTime = Date.now();
+            
+            // Create a placeholder for the assistant's response
+            const assistantMessageElement = $(`<div class="message assistant-message"></div>`);
+            $('#chat-messages').append(assistantMessageElement);
+            
+            // Create a variable to store the full response
+            let fullResponse = '';
+            
+            // Set up event source for streaming
+            const eventSource = new EventSource(`/api/chat?_=${Date.now()}`);
+            
+            // Send the request as POST with fetch
+            fetch('/api/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
                     message: messageText,
                     conversation: conversationHistory,
                     model: model,
                     provider: provider,
-                    sessionId: this.sessionId
+                    sessionId: this.sessionId,
+                    stream: true,
+                    startTime: startTime
                 })
             });
             
-            // Hide typing indicator
-            this.hideTypingIndicator();
-            
-            // Add response to UI
-            this.addMessageToUI('assistant', response.message);
-            
-            // Add to messages array
-            this.messages.push({
-                role: 'assistant',
-                content: response.message
+            // Handle start event
+            eventSource.addEventListener('start', (event) => {
+                console.log('Streaming started');
+                // Hide typing indicator
+                this.hideTypingIndicator();
             });
             
-            // Update metrics if available
-            if (response.metrics) {
-                this.updateMetrics(response.metrics);
-            }
+            // Handle chunk events
+            eventSource.addEventListener('chunk', (event) => {
+                const data = JSON.parse(event.data);
+                fullResponse += data.text;
+                assistantMessageElement.text(fullResponse);
+                this.scrollToBottom();
+            });
             
-            // Scroll to bottom
-            this.scrollToBottom();
+            // Handle complete event
+            eventSource.addEventListener('complete', (event) => {
+                const data = JSON.parse(event.data);
+                
+                // Add to messages array
+                this.messages.push({
+                    role: 'assistant',
+                    content: fullResponse
+                });
+                
+                // Update metrics if available
+                if (data) {
+                    this.updateMetrics({
+                        promptTokens: data.promptTokens || 0,
+                        completionTokens: data.completionTokens || 0,
+                        totalTokens: data.totalTokens || 0
+                    });
+                }
+                
+                // Clean up
+                eventSource.close();
+                this.isProcessing = false;
+                
+                // Scroll to bottom
+                this.scrollToBottom();
+            });
+            
+            // Handle error event
+            eventSource.addEventListener('error', (event) => {
+                console.error('Error in streaming:', event);
+                
+                // Try to parse error data
+                let errorMessage = 'An error occurred while processing your message.';
+                try {
+                    if (event.data) {
+                        const data = JSON.parse(event.data);
+                        if (data.error) {
+                            errorMessage = data.error;
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error parsing error data:', e);
+                }
+                
+                // Update the message with error
+                assistantMessageElement.text(`Error: ${errorMessage}`);
+                
+                // Clean up
+                eventSource.close();
+                this.isProcessing = false;
+                
+                // Scroll to bottom
+                this.scrollToBottom();
+            });
         } catch (error) {
             console.error('Error processing message:', error);
             
