@@ -428,26 +428,90 @@ async function processSelectedText() {
   
   // If assessment is enabled, send to SPL assessment URL
   if (settings.enableAssessment) {
-    openSplAssessmentUrl(selectedText);
+    sendToAssessment(selectedText);
   }
   
   try {
     // Get current settings
     settings = await getSettings();
     
-    // Send message to background script to process text
+    // Create a variable to store the full response for streaming
+    let fullResponse = '';
+    
+    // Create a container for the processed text
+    let processedTextContainer = null;
+    
+    // Set up listener for streaming chunks
+    const chunkListener = (message, sender, sendResponse) => {
+      if (message.action === 'textChunk') {
+        if (message.type === 'start') {
+          console.log('Streaming started');
+          
+          // Create iframe if it doesn't exist
+          if (settings.showIframe && !iframeContainer.style.display === 'flex') {
+            displayProcessedText(selectedText, '');
+            
+            // Get the processed content container
+            processedTextContainer = document.querySelector('.llm-reader-processed-content');
+            if (processedTextContainer) {
+              processedTextContainer.innerHTML = '';
+            }
+          }
+        } else if (message.type === 'chunk') {
+          // Append the chunk to the full response
+          fullResponse += message.chunk;
+          
+          // Update the UI with the chunk
+          if (processedTextContainer) {
+            processedTextContainer.innerHTML = fullResponse;
+          }
+        } else if (message.type === 'complete') {
+          console.log('Streaming complete');
+          
+          // Hide processing overlay
+          processingOverlay.style.display = 'none';
+          
+          // If we're not using the iframe, display the full response
+          if (!settings.showIframe) {
+            displayProcessedText(selectedText, fullResponse);
+          }
+          
+          // Remove the listener
+          chrome.runtime.onMessage.removeListener(chunkListener);
+        } else if (message.type === 'error') {
+          console.error('Streaming error:', message.chunk.error);
+          
+          // Hide processing overlay
+          processingOverlay.style.display = 'none';
+          
+          // Show error
+          showError(message.chunk.error || 'Error processing text');
+          
+          // Remove the listener
+          chrome.runtime.onMessage.removeListener(chunkListener);
+        }
+      }
+    };
+    
+    // Add the listener
+    chrome.runtime.onMessage.addListener(chunkListener);
+    
+    // Send message to background script to process text with streaming
     chrome.runtime.sendMessage({
       action: 'processText',
       text: selectedText,
-      settings: settings
+      settings: settings,
+      stream: true
     }, response => {
-      // Hide processing overlay
-      processingOverlay.style.display = 'none';
-      
-      if (response.success) {
-        displayProcessedText(selectedText, response.processedText);
-      } else {
-        showError(response.error || 'Error processing text');
+      if (!response || !response.success) {
+        // Hide processing overlay
+        processingOverlay.style.display = 'none';
+        
+        // Show error
+        showError(response?.error || 'Error processing text');
+        
+        // Remove the listener
+        chrome.runtime.onMessage.removeListener(chunkListener);
       }
     });
   } catch (error) {
