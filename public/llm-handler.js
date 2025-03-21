@@ -162,12 +162,12 @@ class LLMHandler {
                     // Encode the text for URL
                     const encodedText = encodeURIComponent(text);
                     
-                    // Open the assessment URL with the text
-                    window.open(`${assessmentUrl}${encodedText}`, '_blank');
+                    // Open the assessment URL with the text as content parameter
+                    window.open(`${assessmentUrl}content=${encodedText}`, '_blank');
                     
                     // Send metrics to server for LRS tracking
                     this.sendMetricsToServer({
-                        action: 'sent_to_assessment',
+                        action: 'sent_to_learning',
                         paragraphId: `paragraph-${Date.now()}`,
                         textLength: text.length,
                         model: $('#model').val()

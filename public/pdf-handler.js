@@ -48,17 +48,13 @@ class PDFHandler {
                 // Show the processing overlay
                 $('#processing-overlay').css('display', 'flex');
                 
-                // Process the text if auto-process is enabled
-                if ($('#auto-process').is(':checked')) {
-                    this.reader.llmHandler.processExtractedText(event.data.text);
-                }
+                // Always process the text automatically
+                this.reader.llmHandler.processExtractedText(event.data.text);
                 
-                // Add a button to send text to the assessment URL
-                const sendToAssessmentBtn = $('<button class="btn btn-secondary mt-2">Send to Assessment</button>');
-                sendToAssessmentBtn.on('click', () => {
+                // Set up the Learning button to send text to the assessment URL
+                $('#learning-button').off('click').on('click', () => {
                     this.reader.llmHandler.sendTextToAssessment(event.data.text);
                 });
-                $('#processing-controls').append(sendToAssessmentBtn);
             }
         }
     }
@@ -296,10 +292,13 @@ class PDFHandler {
             // Show the processing overlay
             $('#processing-overlay').css('display', 'flex');
             
-            // Process the text if auto-process is enabled
-            if ($('#auto-process').is(':checked')) {
-                this.reader.llmHandler.processExtractedText(text);
-            }
+            // Always process the text automatically
+            this.reader.llmHandler.processExtractedText(text);
+            
+            // Set up the Learning button to send text to the assessment URL
+            $('#learning-button').off('click').on('click', () => {
+                this.reader.llmHandler.sendTextToAssessment(text);
+            });
         } else {
             console.log('No text extracted at click position');
             alert('No text could be extracted at the click position. Try clicking on a paragraph or text element.');
@@ -325,14 +324,8 @@ class PDFHandler {
                         // Try to find the paragraph or section containing the clicked element
                         const container = this.findTextContainer(element);
                         
-                        // Extract text based on user preferences
-                        const textOnly = $('#text-only').is(':checked');
-                        if (textOnly) {
-                            // Extract only text content, ignoring buttons, inputs, etc.
-                            return this.getTextOnly(container || element);
-                        } else {
-                            return container ? container.textContent.trim() : element.textContent.trim();
-                        }
+                        // Always extract only text content, ignoring buttons, inputs, etc.
+                        return this.getTextOnly(container || element);
                     }
                 }
             } catch (contentError) {

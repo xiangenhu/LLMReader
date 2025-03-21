@@ -96,6 +96,11 @@ class LLMChat {
             const model = $('#model').val();
             const provider = $('#provider').val();
             
+            // Get user preferences
+            const readingLevel = $('#reading-level').val();
+            const language = $('#language').val();
+            const style = $('#style').val();
+            
             // Prepare conversation history for context
             const conversationHistory = this.messages.map(msg => ({
                 role: msg.role,
@@ -123,6 +128,9 @@ class LLMChat {
                     conversation: conversationHistory,
                     model: model,
                     provider: provider,
+                    readingLevel: readingLevel,
+                    language: language,
+                    style: style,
                     sessionId: this.sessionId,
                     stream: true,
                     startTime: startTime

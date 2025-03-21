@@ -194,10 +194,13 @@ class PDFViewer {
             const pdfX = x / this.scale;
             const pdfY = (viewport.height - y) / this.scale;
             
-            // Find text near click position
-            let closestText = '';
-            let minDistance = 50; // Threshold for distance
+            // Find text items near click position
+            const clickedItems = [];
+            const yThreshold = 5; // Items within this vertical distance are considered part of the same line
+            let clickedY = null;
+            let minDistance = 50; // Initial threshold for finding the closest item
             
+            // First, find the item closest to the click
             for (const item of textContent.items) {
                 // Calculate distance from click to text item
                 const dx = Math.abs(item.transform[4] - pdfX);
@@ -205,21 +208,118 @@ class PDFViewer {
                 const distance = Math.sqrt(dx * dx + dy * dy);
                 
                 if (distance < minDistance) {
-                    closestText = item.str;
                     minDistance = distance;
+                    clickedY = item.transform[5]; // Y position of the closest item
                 }
             }
             
-            if (closestText) {
-                console.log('Extracted text:', closestText);
+            // If we found a closest item, collect all items on the same line and nearby lines
+            if (clickedY !== null) {
+                // Sort items by y position (line) and then by x position (order in line)
+                const sortedItems = [...textContent.items].sort((a, b) => {
+                    // First sort by y position (with some tolerance for same line)
+                    const yDiff = Math.abs(a.transform[5] - b.transform[5]);
+                    if (yDiff > yThreshold) {
+                        return b.transform[5] - a.transform[5]; // Descending y order
+                    }
+                    // If on same line, sort by x position
+                    return a.transform[4] - b.transform[4]; // Ascending x order
+                });
+                
+                // Group items by line (y position)
+                const lines = [];
+                let currentLine = [];
+                let currentY = null;
+                
+                for (const item of sortedItems) {
+                    if (currentY === null) {
+                        currentY = item.transform[5];
+                        currentLine.push(item);
+                    } else if (Math.abs(item.transform[5] - currentY) <= yThreshold) {
+                        // Same line
+                        currentLine.push(item);
+                    } else {
+                        // New line
+                        lines.push(currentLine);
+                        currentLine = [item];
+                        currentY = item.transform[5];
+                    }
+                }
+                
+                // Add the last line if not empty
+                if (currentLine.length > 0) {
+                    lines.push(currentLine);
+                }
+                
+                // Find the line containing the clicked position
+                let clickedLineIndex = -1;
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    for (const item of line) {
+                        if (Math.abs(item.transform[5] - clickedY) <= yThreshold) {
+                            clickedLineIndex = i;
+                            break;
+                        }
+                    }
+                    if (clickedLineIndex !== -1) break;
+                }
+                
+                // Extract text from the clicked line and surrounding lines (paragraph)
+                if (clickedLineIndex !== -1) {
+                    // Get a few lines before and after to form a paragraph
+                    const startLine = Math.max(0, clickedLineIndex - 2);
+                    const endLine = Math.min(lines.length - 1, clickedLineIndex + 2);
+                    
+                    let extractedText = '';
+                    for (let i = startLine; i <= endLine; i++) {
+                        const lineText = lines[i].map(item => item.str).join(' ');
+                        extractedText += lineText + ' ';
+                    }
+                    
+                    extractedText = extractedText.trim();
+                    
+                    if (extractedText) {
+                        console.log('Extracted text:', extractedText);
+                        
+                        // Dispatch a custom event with the extracted text
+                        const event = new CustomEvent('pdf-text-extracted', {
+                            detail: { text: extractedText }
+                        });
+                        document.dispatchEvent(event);
+                        
+                        // Also send message to parent window
+                        if (window.parent !== window) {
+                            window.parent.postMessage({
+                                type: 'pdf-text-extracted',
+                                text: extractedText
+                            }, '*');
+                        }
+                        
+                        return;
+                    }
+                }
+            }
+            
+            // Fallback: if we couldn't extract a paragraph, get all text from the page
+            const pageText = textContent.items.map(item => item.str).join(' ');
+            if (pageText) {
+                console.log('Extracted page text (fallback)');
                 
                 // Dispatch a custom event with the extracted text
                 const event = new CustomEvent('pdf-text-extracted', {
-                    detail: { text: closestText }
+                    detail: { text: pageText }
                 });
                 document.dispatchEvent(event);
+                
+                // Also send message to parent window
+                if (window.parent !== window) {
+                    window.parent.postMessage({
+                        type: 'pdf-text-extracted',
+                        text: pageText
+                    }, '*');
+                }
             } else {
-                console.log('No text found near click position');
+                console.log('No text found on page');
             }
         } catch (error) {
             console.error('Error extracting text:', error);

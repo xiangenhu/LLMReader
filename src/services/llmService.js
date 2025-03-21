@@ -199,9 +199,12 @@ exports.processText = async (text, readingLevel, language, style, model, stream 
  * @param {string} sessionId - Unique identifier for the session
  * @param {boolean} stream - Whether to stream the response
  * @param {function} onChunk - Callback for streaming chunks
+ * @param {string} readingLevel - The target reading level
+ * @param {string} language - The target language
+ * @param {string} style - The target writing style
  * @returns {Promise<Object>} - The response message and metrics
  */
-exports.processChat = async (message, conversation, model, provider, sessionId = 'default', stream = false, onChunk = null) => {
+exports.processChat = async (message, conversation, model, provider, sessionId = 'default', stream = false, onChunk = null, readingLevel = 'original', language = 'original', style = 'original') => {
   // Determine provider based on model if not explicitly provided
   if (!provider) {
     let originalModel = model;
@@ -221,6 +224,25 @@ exports.processChat = async (message, conversation, model, provider, sessionId =
       }
     } else {
       throw new Error(`Could not determine provider for model: ${model}`);
+    }
+  }
+  
+  // Add system message with preferences if any are specified
+  let systemMessage = 'You are a helpful assistant.';
+  
+  if (readingLevel !== 'original' || language !== 'original' || style !== 'original') {
+    systemMessage = 'You are a helpful assistant. ';
+    
+    if (readingLevel !== 'original') {
+      systemMessage += `Please respond at a ${readingLevel} reading level. `;
+    }
+    
+    if (language !== 'original') {
+      systemMessage += `Please respond in ${language}. `;
+    }
+    
+    if (style !== 'original') {
+      systemMessage += `Please use a ${style} writing style. `;
     }
   }
   
@@ -252,7 +274,7 @@ exports.processChat = async (message, conversation, model, provider, sessionId =
       if (!formattedConversation.some(msg => msg.role === 'system')) {
         formattedConversation.unshift({
           role: 'system',
-          content: 'You are a helpful assistant.'
+          content: systemMessage
         });
       }
       

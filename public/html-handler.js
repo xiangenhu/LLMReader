@@ -186,17 +186,13 @@ class HTMLHandler {
             // Show the processing overlay
             $('#processing-overlay').css('display', 'flex');
             
-            // Process the text if auto-process is enabled
-            if ($('#auto-process').is(':checked')) {
-                this.reader.llmHandler.processExtractedText(text);
-            }
+            // Always process the text automatically
+            this.reader.llmHandler.processExtractedText(text);
             
-            // Add a button to send text to the assessment URL
-            const sendToAssessmentBtn = $('<button class="btn btn-secondary mt-2">Send to Assessment</button>');
-            sendToAssessmentBtn.on('click', () => {
+            // Set up the Learning button to send text to the assessment URL
+            $('#learning-button').off('click').on('click', () => {
                 this.reader.llmHandler.sendTextToAssessment(text);
             });
-            $('#processing-controls').append(sendToAssessmentBtn);
         } else {
             console.log('No text extracted at click position');
             
@@ -216,10 +212,8 @@ class HTMLHandler {
                         // Show the processing overlay
                         $('#processing-overlay').css('display', 'flex');
                         
-                        // Process the text if auto-process is enabled
-                        if ($('#auto-process').is(':checked')) {
-                            this.reader.llmHandler.processExtractedText(bodyText);
-                        }
+                        // Always process the text automatically
+                        this.reader.llmHandler.processExtractedText(bodyText);
                         
                         return;
                     }
@@ -299,13 +293,9 @@ class HTMLHandler {
             }
         }
         
-        const textOnly = $('#text-only').is(':checked');
-        if (textOnly) {
-            // Extract only text content, ignoring buttons, inputs, etc.
-            return this.getTextOnly(container);
-        } else {
-            return container ? container.textContent.trim() : element.textContent.trim();
-        }
+        // Always extract only text content, ignoring buttons, inputs, etc.
+        // regardless of the text-only checkbox setting
+        return this.getTextOnly(container || element);
     }
     
     getTextOnly(element) {

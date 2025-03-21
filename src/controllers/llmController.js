@@ -109,7 +109,7 @@ exports.processTextStream = async (requestData, res) => {
  */
 exports.processChat = async (req, res) => {
   try {
-    const { message, conversation, model, provider, sessionId } = req.body;
+    const { message, conversation, model, provider, readingLevel, language, style, sessionId } = req.body;
     
     if (!message) {
       return res.status(400).json({ error: 'Message is required' });
@@ -126,7 +126,11 @@ exports.processChat = async (req, res) => {
       model || 'gpt-3.5-turbo',
       provider,
       sessionId || `session-${Date.now()}`,
-      false
+      false,
+      null,
+      readingLevel,
+      language,
+      style
     );
     
     res.json({
@@ -150,7 +154,7 @@ exports.processChat = async (req, res) => {
  */
 exports.processChatStream = async (requestData, res) => {
   try {
-    const { message, conversation, model, provider, sessionId, startTime } = requestData;
+    const { message, conversation, model, provider, readingLevel, language, style, sessionId, startTime } = requestData;
     
     if (!message) {
       throw new Error('Message is required');
@@ -177,7 +181,10 @@ exports.processChatStream = async (requestData, res) => {
       provider,
       sessionId || `session-${Date.now()}`,
       true,
-      onChunk
+      onChunk,
+      readingLevel,
+      language,
+      style
     );
     
     fullText = result.message;
