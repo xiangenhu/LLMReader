@@ -131,6 +131,42 @@ function countGeminiTokens(text) {
 }
 
 /**
+ * Count tokens for Deepseek models (approximation)
+ * @param {string} text - The text to count tokens for
+ * @returns {number} - The approximate token count
+ */
+function countDeepseekTokens(text) {
+  // Deepseek uses a tokenizer similar to OpenAI's models
+  try {
+    // Ensure text is a string
+    if (text === undefined || text === null) {
+      console.warn('Received undefined or null text in countDeepseekTokens');
+      return 0;
+    }
+    
+    // Convert to string if not already
+    const textStr = String(text);
+    
+    if (!encoderCache['cl100k_base']) {
+      try {
+        encoderCache['cl100k_base'] = tiktoken.getEncoding('cl100k_base');
+      } catch (encError) {
+        console.warn('Failed to get encoding for Deepseek tokens, falling back to approximation', encError);
+        return approximateTokenCount(textStr);
+      }
+    }
+    
+    const encoder = encoderCache['cl100k_base'];
+    const tokens = encoder.encode(textStr);
+    
+    return tokens.length;
+  } catch (error) {
+    console.error('Error counting Deepseek tokens:', error);
+    return approximateTokenCount(text);
+  }
+}
+
+/**
  * Approximate token count based on word count
  * @param {string} text - The text to count tokens for
  * @returns {number} - The approximate token count
@@ -153,7 +189,7 @@ function approximateTokenCount(text) {
 /**
  * Count tokens based on provider
  * @param {string} text - The text to count tokens for
- * @param {string} provider - The provider (openai, anthropic, google)
+ * @param {string} provider - The provider (openai, anthropic, google, deepseek)
  * @param {string} model - The model name
  * @returns {number} - The token count
  */
@@ -165,6 +201,8 @@ function countTokens(text, provider, model) {
       return countClaudeTokens(text);
     case 'google':
       return countGeminiTokens(text);
+    case 'deepseek':
+      return countDeepseekTokens(text);
     default:
       return approximateTokenCount(text);
   }
@@ -175,5 +213,6 @@ module.exports = {
   countOpenAITokens,
   countClaudeTokens,
   countGeminiTokens,
+  countDeepseekTokens,
   approximateTokenCount
 };

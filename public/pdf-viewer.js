@@ -173,6 +173,23 @@ class PDFViewer {
         }
     }
     
+    // Helper function to check if text is likely a button
+    isLikelyButton(item) {
+        // Check if text is short (typical for buttons)
+        const isShortText = item.str.length < 20;
+        
+        // Check if text contains common button words
+        const buttonWords = ['submit', 'cancel', 'ok', 'yes', 'no', 'next', 'prev', 'back', 'continue', 'save'];
+        const containsButtonWord = buttonWords.some(word => 
+            item.str.toLowerCase().includes(word));
+        
+        // Check if text is all uppercase (common for buttons)
+        const isAllUppercase = item.str === item.str.toUpperCase() && item.str.length > 1;
+        
+        // If it's a short text AND (contains button word OR is all uppercase), it's likely a button
+        return isShortText && (containsButtonWord || isAllUppercase);
+    }
+    
     // Handle canvas click for text extraction
     async handleCanvasClick(e) {
         // Get click coordinates relative to canvas
@@ -189,6 +206,38 @@ class PDFViewer {
             // Get text content
             const textContent = await page.getTextContent();
             
+            // Get annotations (which might include buttons/form fields)
+            const annotations = await page.getAnnotations();
+            
+            // Create a set of positions to ignore (button positions)
+            const buttonPositions = new Set();
+            
+            // Add annotation positions to ignore (buttons, form fields, etc.)
+            for (const annotation of annotations) {
+                if (annotation.subtype === 'Widget' || // Form fields
+                    annotation.fieldType === 'Btn') {  // Buttons
+                    
+                    // Add the position to ignore
+                    if (annotation.rect) {
+                        const centerX = (annotation.rect[0] + annotation.rect[2]) / 2;
+                        const centerY = (annotation.rect[1] + annotation.rect[3]) / 2;
+                        buttonPositions.add(`${Math.round(centerX)},${Math.round(centerY)}`);
+                    }
+                }
+            }
+            
+            // Filter out items that are likely buttons
+            const nonButtonItems = textContent.items.filter(item => {
+                // Check if item position matches any button position
+                const itemPos = `${Math.round(item.transform[4])},${Math.round(item.transform[5])}`;
+                if (buttonPositions.has(itemPos)) {
+                    return false;
+                }
+                
+                // Also filter based on text content that looks like a button
+                return !this.isLikelyButton(item);
+            });
+            
             // Convert viewport coordinates to PDF coordinates
             const viewport = page.getViewport({ scale: this.scale });
             const pdfX = x / this.scale;
@@ -201,7 +250,7 @@ class PDFViewer {
             let minDistance = 50; // Initial threshold for finding the closest item
             
             // First, find the item closest to the click
-            for (const item of textContent.items) {
+            for (const item of nonButtonItems) {
                 // Calculate distance from click to text item
                 const dx = Math.abs(item.transform[4] - pdfX);
                 const dy = Math.abs(item.transform[5] - pdfY);
@@ -216,7 +265,7 @@ class PDFViewer {
             // If we found a closest item, collect all items on the same line and nearby lines
             if (clickedY !== null) {
                 // Sort items by y position (line) and then by x position (order in line)
-                const sortedItems = [...textContent.items].sort((a, b) => {
+                const sortedItems = [...nonButtonItems].sort((a, b) => {
                     // First sort by y position (with some tolerance for same line)
                     const yDiff = Math.abs(a.transform[5] - b.transform[5]);
                     if (yDiff > yThreshold) {
@@ -300,8 +349,8 @@ class PDFViewer {
                 }
             }
             
-            // Fallback: if we couldn't extract a paragraph, get all text from the page
-            const pageText = textContent.items.map(item => item.str).join(' ');
+            // Fallback: if we couldn't extract a paragraph, get all text from the page (excluding buttons)
+            const pageText = nonButtonItems.map(item => item.str).join(' ');
             if (pageText) {
                 console.log('Extracted page text (fallback)');
                 

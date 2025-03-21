@@ -419,6 +419,23 @@ class PDFHandler {
         return text.trim();
     }
     
+    // Helper function to check if text is likely a button
+    isLikelyButton(item) {
+        // Check if text is short (typical for buttons)
+        const isShortText = item.str.length < 20;
+        
+        // Check if text contains common button words
+        const buttonWords = ['submit', 'cancel', 'ok', 'yes', 'no', 'next', 'prev', 'back', 'continue', 'save'];
+        const containsButtonWord = buttonWords.some(word => 
+            item.str.toLowerCase().includes(word));
+        
+        // Check if text is all uppercase (common for buttons)
+        const isAllUppercase = item.str === item.str.toUpperCase() && item.str.length > 1;
+        
+        // If it's a short text AND (contains button word OR is all uppercase), it's likely a button
+        return isShortText && (containsButtonWord || isAllUppercase);
+    }
+    
     async extractTextFromPdf() {
         console.log('Extracting text from PDF at URL:', this.reader.pdfUrl);
         
@@ -447,7 +464,41 @@ class PDFHandler {
                 console.log(`Extracting text from page ${i}`);
                 const page = await pdf.getPage(i);
                 const textContent = await page.getTextContent();
-                const pageText = textContent.items.map(item => item.str).join(' ');
+                
+                // Get annotations (which might include buttons/form fields)
+                const annotations = await page.getAnnotations();
+                
+                // Create a set of positions to ignore (button positions)
+                const buttonPositions = new Set();
+                
+                // Add annotation positions to ignore (buttons, form fields, etc.)
+                for (const annotation of annotations) {
+                    if (annotation.subtype === 'Widget' || // Form fields
+                        annotation.fieldType === 'Btn') {  // Buttons
+                        
+                        // Add the position to ignore
+                        if (annotation.rect) {
+                            const centerX = (annotation.rect[0] + annotation.rect[2]) / 2;
+                            const centerY = (annotation.rect[1] + annotation.rect[3]) / 2;
+                            buttonPositions.add(`${Math.round(centerX)},${Math.round(centerY)}`);
+                        }
+                    }
+                }
+                
+                // Filter out items that are likely buttons
+                const nonButtonItems = textContent.items.filter(item => {
+                    // Check if item position matches any button position
+                    const itemPos = `${Math.round(item.transform[4])},${Math.round(item.transform[5])}`;
+                    if (buttonPositions.has(itemPos)) {
+                        return false;
+                    }
+                    
+                    // Also filter based on text content that looks like a button
+                    return !this.isLikelyButton(item);
+                });
+                
+                // Join the filtered text items
+                const pageText = nonButtonItems.map(item => item.str).join(' ');
                 allText += pageText + ' ';
             }
             

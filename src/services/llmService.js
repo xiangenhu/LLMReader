@@ -128,6 +128,15 @@ exports.processText = async (text, readingLevel, language, style, model, stream 
     } else {
       provider = 'google';
     }
+  } else if (model.startsWith('deepseek-')) {
+    // Check if Deepseek API key is properly set
+    if (!process.env.DEEPSEEK_API_KEY || process.env.DEEPSEEK_API_KEY === 'your_deepseek_api_key_here') {
+      console.warn('Deepseek API key not set. Falling back to OpenAI GPT-3.5-turbo.');
+      provider = 'openai';
+      model = 'gpt-3.5-turbo'; // Fall back to GPT-3.5-turbo
+    } else {
+      provider = 'deepseek';
+    }
   } else {
     throw new Error(`Could not determine provider for model: ${model}`);
   }
@@ -156,6 +165,9 @@ exports.processText = async (text, readingLevel, language, style, model, stream 
       break;
     case 'google':
       processedText = await callGemini(prompt, model, stream, onChunk);
+      break;
+    case 'deepseek':
+      processedText = await callDeepseek(prompt, model, stream, onChunk);
       break;
     default:
       throw new Error(`Unsupported provider: ${provider}`);
@@ -221,6 +233,15 @@ exports.processChat = async (message, conversation, model, provider, sessionId =
         model = 'gpt-3.5-turbo'; // Fall back to GPT-3.5-turbo
       } else {
         provider = 'google';
+      }
+    } else if (model.startsWith('deepseek-')) {
+      // Check if Deepseek API key is properly set
+      if (!process.env.DEEPSEEK_API_KEY || process.env.DEEPSEEK_API_KEY === 'your_deepseek_api_key_here') {
+        console.warn('Deepseek API key not set. Falling back to OpenAI GPT-3.5-turbo.');
+        provider = 'openai';
+        model = 'gpt-3.5-turbo'; // Fall back to GPT-3.5-turbo
+      } else {
+        provider = 'deepseek';
       }
     } else {
       throw new Error(`Could not determine provider for model: ${model}`);
@@ -325,6 +346,32 @@ exports.processChat = async (message, conversation, model, provider, sessionId =
       }
       break;
       
+    case 'deepseek':
+      // Format conversation for Deepseek (similar to OpenAI format)
+      formattedConversation = conversation.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+      
+      // Add system message if not present
+      if (!formattedConversation.some(msg => msg.role === 'system')) {
+        formattedConversation.unshift({
+          role: 'system',
+          content: systemMessage
+        });
+      }
+      
+      // Count tokens in prompt
+      promptTokens = countTokens(JSON.stringify(formattedConversation), provider, model);
+      
+      // Call Deepseek API with streaming if requested
+      if (stream && onChunk) {
+        responseMessage = await callDeepseekChatAPI(formattedConversation, model, true, onChunk);
+      } else {
+        responseMessage = await callDeepseekChatAPI(formattedConversation, model);
+      }
+      break;
+      
     default:
       throw new Error(`Unsupported provider: ${provider}`);
   }
@@ -380,6 +427,15 @@ ${text}`;
     } else {
       provider = 'google';
     }
+  } else if (model.startsWith('deepseek-')) {
+    // Check if Deepseek API key is properly set
+    if (!process.env.DEEPSEEK_API_KEY || process.env.DEEPSEEK_API_KEY === 'your_deepseek_api_key_here') {
+      console.warn('Deepseek API key not set. Falling back to OpenAI GPT-3.5-turbo.');
+      provider = 'openai';
+      model = 'gpt-3.5-turbo'; // Fall back to GPT-3.5-turbo
+    } else {
+      provider = 'deepseek';
+    }
   } else {
     throw new Error(`Could not determine provider for model: ${model}`);
   }
@@ -408,6 +464,9 @@ ${text}`;
       break;
     case 'google':
       assessment = await callGemini(prompt, model);
+      break;
+    case 'deepseek':
+      assessment = await callDeepseek(prompt, model);
       break;
     default:
       throw new Error(`Unsupported provider: ${provider}`);
@@ -1111,5 +1170,238 @@ async function callGemini(prompt, model = 'gemini-pro', stream = false, onChunk 
   } catch (error) {
     console.error('Gemini API error:', error.response?.data || error.message);
     throw new Error(`Gemini API error: ${error.response?.data?.error?.message || error.message}`);
+  }
+}
+
+/**
+ * Call Deepseek API
+ * @param {string} prompt - The prompt to send to the API
+ * @param {string} model - The model to use
+ * @param {boolean} stream - Whether to stream the response
+ * @param {function} onChunk - Callback for streaming chunks
+ * @returns {Promise<string>} - The response text (if not streaming)
+ */
+async function callDeepseek(prompt, model = 'deepseek-chat', stream = false, onChunk = null) {
+  try {
+    // Map model names to actual Deepseek model identifiers if needed
+    const modelMap = {
+      'deepseek-chat': 'deepseek-chat',
+      'deepseek-coder': 'deepseek-coder'
+    };
+    
+    const deepseekModel = modelMap[model] || model;
+    
+    const requestBody = {
+      model: deepseekModel,
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a helpful assistant that rewrites text based on user preferences.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 1000,
+      stream: stream
+    };
+    
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
+    };
+    
+    if (stream && onChunk) {
+      // For streaming responses
+      const response = await axios.post(
+        'https://api.deepseek.com/v1/chat/completions',
+        requestBody,
+        {
+          headers,
+          responseType: 'stream'
+        }
+      );
+      
+      let fullText = '';
+      
+      // Buffer to accumulate incomplete JSON data
+      let buffer = '';
+      
+      response.data.on('data', (chunk) => {
+        // Add the new chunk to our buffer
+        const chunkStr = chunk.toString();
+        buffer += chunkStr;
+        
+        // Process complete lines from the buffer
+        let newlineIndex;
+        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+          // Extract a complete line
+          const line = buffer.substring(0, newlineIndex).trim();
+          buffer = buffer.substring(newlineIndex + 1);
+          
+          // Skip empty lines
+          if (!line) continue;
+          
+          // Check for end of stream
+          if (line.includes('[DONE]')) return;
+          
+          // Process data lines
+          if (line.startsWith('data:')) {
+            try {
+              // Extract the JSON part
+              const jsonStr = line.substring(5).trim();
+              if (!jsonStr || jsonStr === '') continue;
+              
+              // Try to parse the JSON
+              const data = JSON.parse(jsonStr);
+              
+              // Extract content if available
+              if (data.choices && data.choices[0].delta && data.choices[0].delta.content) {
+                const content = data.choices[0].delta.content;
+                fullText += content;
+                onChunk(content);
+              }
+            } catch (e) {
+              // Log the error but don't throw - we'll try again with more data
+              console.error('Error parsing streaming data:', e.message);
+              // Don't add the problematic line back to the buffer
+              continue;
+            }
+          }
+        }
+      });
+      
+      return new Promise((resolve) => {
+        response.data.on('end', () => {
+          resolve(fullText);
+        });
+      });
+    } else {
+      // For non-streaming responses
+      const response = await axios.post(
+        'https://api.deepseek.com/v1/chat/completions',
+        requestBody,
+        { headers }
+      );
+      
+      return response.data.choices[0].message.content;
+    }
+  } catch (error) {
+    console.error('Deepseek API error:', error.response?.data || error.message);
+    throw new Error(`Deepseek API error: ${error.response?.data?.error?.message || error.message}`);
+  }
+}
+
+/**
+ * Call Deepseek Chat API
+ * @param {Array} conversation - The conversation history
+ * @param {string} model - The model to use
+ * @param {boolean} stream - Whether to stream the response
+ * @param {function} onChunk - Callback for streaming chunks
+ * @returns {Promise<string>} - The response text
+ */
+async function callDeepseekChatAPI(conversation, model = 'deepseek-chat', stream = false, onChunk = null) {
+  try {
+    // Map model names to actual Deepseek model identifiers if needed
+    const modelMap = {
+      'deepseek-chat': 'deepseek-chat',
+      'deepseek-coder': 'deepseek-coder'
+    };
+    
+    const deepseekModel = modelMap[model] || model;
+    
+    const requestBody = {
+      model: deepseekModel,
+      messages: conversation,
+      temperature: 0.7,
+      max_tokens: 1000,
+      stream: stream
+    };
+    
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
+    };
+    
+    if (stream && onChunk) {
+      // For streaming responses
+      const response = await axios.post(
+        'https://api.deepseek.com/v1/chat/completions',
+        requestBody,
+        {
+          headers,
+          responseType: 'stream'
+        }
+      );
+      
+      let fullText = '';
+      
+      // Buffer to accumulate incomplete JSON data
+      let buffer = '';
+      
+      response.data.on('data', (chunk) => {
+        // Add the new chunk to our buffer
+        const chunkStr = chunk.toString();
+        buffer += chunkStr;
+        
+        // Process complete lines from the buffer
+        let newlineIndex;
+        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+          // Extract a complete line
+          const line = buffer.substring(0, newlineIndex).trim();
+          buffer = buffer.substring(newlineIndex + 1);
+          
+          // Skip empty lines
+          if (!line) continue;
+          
+          // Check for end of stream
+          if (line.includes('[DONE]')) return;
+          
+          // Process data lines
+          if (line.startsWith('data:')) {
+            try {
+              // Extract the JSON part
+              const jsonStr = line.substring(5).trim();
+              if (!jsonStr || jsonStr === '') continue;
+              
+              // Try to parse the JSON
+              const data = JSON.parse(jsonStr);
+              
+              // Extract content if available
+              if (data.choices && data.choices[0].delta && data.choices[0].delta.content) {
+                const content = data.choices[0].delta.content;
+                fullText += content;
+                onChunk(content);
+              }
+            } catch (e) {
+              // Log the error but don't throw - we'll try again with more data
+              console.error('Error parsing streaming data:', e.message);
+              // Don't add the problematic line back to the buffer
+              continue;
+            }
+          }
+        }
+      });
+      
+      return new Promise((resolve) => {
+        response.data.on('end', () => {
+          resolve(fullText);
+        });
+      });
+    } else {
+      // For non-streaming responses
+      const response = await axios.post(
+        'https://api.deepseek.com/v1/chat/completions',
+        requestBody,
+        { headers }
+      );
+      
+      return response.data.choices[0].message.content;
+    }
+  } catch (error) {
+    console.error('Deepseek Chat API error:', error.response?.data || error.message);
+    throw new Error(`Deepseek Chat API error: ${error.response?.data?.error?.message || error.message}`);
   }
 }
