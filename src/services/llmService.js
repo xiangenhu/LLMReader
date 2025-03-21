@@ -853,75 +853,107 @@ async function callClaudeChatAPI(conversation, model, stream = false, onChunk = 
     
     if (stream && onChunk) {
       // For streaming responses
-      const response = await axios.post(
-        'https://api.anthropic.com/v1/messages',
-        requestBody,
-        {
-          headers,
-          responseType: 'stream'
-        }
-      );
-      
-      let fullText = '';
-      
-      // Buffer to accumulate incomplete JSON data
-      let buffer = '';
-      
-      response.data.on('data', (chunk) => {
-        // Add the new chunk to our buffer
-        const chunkStr = chunk.toString();
-        buffer += chunkStr;
+      try {
+        const response = await axios.post(
+          'https://api.anthropic.com/v1/messages',
+          requestBody,
+          {
+            headers,
+            responseType: 'stream'
+          }
+        );
         
-        // Process complete lines from the buffer
-        let newlineIndex;
-        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
-          // Extract a complete line
-          const line = buffer.substring(0, newlineIndex).trim();
-          buffer = buffer.substring(newlineIndex + 1);
+        let fullText = '';
+        
+        // Buffer to accumulate incomplete JSON data
+        let buffer = '';
+        
+        response.data.on('data', (chunk) => {
+          // Add the new chunk to our buffer
+          const chunkStr = chunk.toString();
+          buffer += chunkStr;
           
-          // Skip empty lines
-          if (!line) continue;
-          
-          // Process data lines
-          if (line.startsWith('data:')) {
-            try {
-              // Extract the JSON part
-              const jsonStr = line.substring(5).trim();
-              if (!jsonStr || jsonStr === '') continue;
-              
-              // Try to parse the JSON
-              const data = JSON.parse(jsonStr);
-              
-              // Extract content if available
-              if (data.type === 'content_block_delta' && data.delta && data.delta.text) {
-                const content = data.delta.text;
-                fullText += content;
-                onChunk(content);
+          // Process complete lines from the buffer
+          let newlineIndex;
+          while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+            // Extract a complete line
+            const line = buffer.substring(0, newlineIndex).trim();
+            buffer = buffer.substring(newlineIndex + 1);
+            
+            // Skip empty lines
+            if (!line) continue;
+            
+            // Process data lines
+            if (line.startsWith('data:')) {
+              try {
+                // Extract the JSON part
+                const jsonStr = line.substring(5).trim();
+                if (!jsonStr || jsonStr === '') continue;
+                
+                // Try to parse the JSON
+                const data = JSON.parse(jsonStr);
+                
+                // Extract content if available
+                if (data.type === 'content_block_delta' && data.delta && data.delta.text) {
+                  const content = data.delta.text;
+                  fullText += content;
+                  onChunk(content);
+                }
+              } catch (e) {
+                // Log the error but don't throw - we'll try again with more data
+                console.error('Error parsing streaming data:', e.message);
+                // Don't add the problematic line back to the buffer
+                continue;
               }
-            } catch (e) {
-              // Log the error but don't throw - we'll try again with more data
-              console.error('Error parsing streaming data:', e.message);
-              // Don't add the problematic line back to the buffer
-              continue;
             }
           }
-        }
-      });
-      
-      return new Promise((resolve) => {
-        response.data.on('end', () => {
-          resolve(fullText);
         });
-      });
+        
+        return new Promise((resolve) => {
+          response.data.on('end', () => {
+            resolve(fullText);
+          });
+        });
+      } catch (streamError) {
+        // Handle rate limiting specifically for streaming
+        if (streamError.response && streamError.response.status === 429) {
+          const retryAfter = streamError.response.headers['retry-after'] || 60;
+          const errorMessage = `Claude API rate limit exceeded. Please try again in ${retryAfter} seconds.`;
+          console.warn('Claude API rate limit error:', errorMessage);
+          
+          // Send a special message to the client about rate limiting
+          if (onChunk) {
+            onChunk(`\n\n[ERROR: ${errorMessage}]`);
+          }
+          
+          // Return a graceful error message instead of throwing
+          return `I apologize, but I've encountered a rate limit with the Claude API. Please try again in a moment.`;
+        }
+        
+        // For other errors, re-throw
+        throw streamError;
+      }
     } else {
       // For non-streaming responses
-      const response = await axios.post(
-        'https://api.anthropic.com/v1/messages',
-        requestBody,
-        { headers }
-      );
-      
-      return response.data.content[0].text;
+      try {
+        const response = await axios.post(
+          'https://api.anthropic.com/v1/messages',
+          requestBody,
+          { headers }
+        );
+        
+        return response.data.content[0].text;
+      } catch (nonStreamError) {
+        // Handle rate limiting for non-streaming requests
+        if (nonStreamError.response && nonStreamError.response.status === 429) {
+          const retryAfter = nonStreamError.response.headers['retry-after'] || 60;
+          console.warn(`Claude API rate limit exceeded. Please try again in ${retryAfter} seconds.`);
+          return `I apologize, but I've encountered a rate limit with the Claude API. Please try again in a moment.`;
+        }
+        
+        // For other errors, re-throw
+        throw nonStreamError;
+      }
     }
   } catch (error) {
     console.error('Claude Chat API error:', error.response?.data || error.message);
@@ -949,97 +981,152 @@ async function callGeminiChatAPI(conversation, model, stream = false, onChunk = 
     
     if (stream && onChunk) {
       // For streaming responses
-      const response = await axios.post(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${process.env.GEMINI_API_KEY}`,
-        requestBody,
-        {
-          responseType: 'stream'
-        }
-      );
-      
-      let fullText = '';
-      
-      // Buffer to accumulate incomplete JSON data
-      let buffer = '';
-      
-      response.data.on('data', (chunk) => {
-        // Add the new chunk to our buffer
-        const chunkStr = chunk.toString();
-        buffer += chunkStr;
-        
-        // For Gemini, we need to handle the case where each chunk might be a complete JSON object
-        // Try to parse the buffer as a complete JSON object first
-        try {
-          if (buffer.trim()) {
-            const data = JSON.parse(buffer);
-            if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
-              const content = data.candidates[0].content.parts[0].text;
-              fullText += content;
-              onChunk(content);
-            }
-            // Clear the buffer after successful parsing
-            buffer = '';
+      try {
+        const response = await axios.post(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${process.env.GEMINI_API_KEY}`,
+          requestBody,
+          {
+            responseType: 'stream'
           }
-        } catch (e) {
-          // If parsing as a complete object fails, try to find complete JSON objects in the buffer
-          // This is a simplified approach - in a real implementation, you might need more sophisticated JSON parsing
+        );
+        
+        let fullText = '';
+        
+        // Buffer to accumulate incomplete JSON data
+        let buffer = '';
+        
+        response.data.on('data', (chunk) => {
+          // Add the new chunk to our buffer
+          const chunkStr = chunk.toString();
+          buffer += chunkStr;
+          
+          // For Gemini, we need to handle the case where each chunk might be a complete JSON object
+          // Try to parse the buffer as a complete JSON object first
           try {
-            // Look for a complete JSON object with matching braces
-            let openBraces = 0;
-            let startPos = -1;
-            let endPos = -1;
-            
-            for (let i = 0; i < buffer.length; i++) {
-              if (buffer[i] === '{') {
-                if (openBraces === 0) {
-                  startPos = i;
-                }
-                openBraces++;
-              } else if (buffer[i] === '}') {
-                openBraces--;
-                if (openBraces === 0 && startPos !== -1) {
-                  endPos = i + 1;
-                  const jsonStr = buffer.substring(startPos, endPos);
-                  try {
-                    const data = JSON.parse(jsonStr);
-                    if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
-                      const content = data.candidates[0].content.parts[0].text;
-                      fullText += content;
-                      onChunk(content);
-                    }
-                  } catch (innerError) {
-                    // If parsing fails, just continue
-                    console.error('Error parsing JSON object:', innerError.message);
+            if (buffer.trim()) {
+              const data = JSON.parse(buffer);
+              if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
+                const content = data.candidates[0].content.parts[0].text;
+                fullText += content;
+                onChunk(content);
+              }
+              // Clear the buffer after successful parsing
+              buffer = '';
+            }
+          } catch (e) {
+            // If parsing as a complete object fails, try to find complete JSON objects in the buffer
+            // This is a simplified approach - in a real implementation, you might need more sophisticated JSON parsing
+            try {
+              // Look for a complete JSON object with matching braces
+              let openBraces = 0;
+              let startPos = -1;
+              let endPos = -1;
+              
+              for (let i = 0; i < buffer.length; i++) {
+                if (buffer[i] === '{') {
+                  if (openBraces === 0) {
+                    startPos = i;
                   }
-                  // Remove the processed part from the buffer
-                  buffer = buffer.substring(endPos);
-                  // Reset for next object
-                  startPos = -1;
-                  endPos = -1;
-                  i = -1; // Start over with the new buffer
+                  openBraces++;
+                } else if (buffer[i] === '}') {
+                  openBraces--;
+                  if (openBraces === 0 && startPos !== -1) {
+                    endPos = i + 1;
+                    const jsonStr = buffer.substring(startPos, endPos);
+                    try {
+                      const data = JSON.parse(jsonStr);
+                      if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
+                        const content = data.candidates[0].content.parts[0].text;
+                        fullText += content;
+                        onChunk(content);
+                      }
+                    } catch (innerError) {
+                      // If parsing fails, just continue
+                      console.error('Error parsing JSON object:', innerError.message);
+                    }
+                    // Remove the processed part from the buffer
+                    buffer = buffer.substring(endPos);
+                    // Reset for next object
+                    startPos = -1;
+                    endPos = -1;
+                    i = -1; // Start over with the new buffer
+                  }
                 }
               }
+            } catch (outerError) {
+              // If the more sophisticated parsing fails, just keep the buffer for the next chunk
+              console.error('Error processing buffer:', outerError.message);
             }
-          } catch (outerError) {
-            // If the more sophisticated parsing fails, just keep the buffer for the next chunk
-            console.error('Error processing buffer:', outerError.message);
           }
-        }
-      });
-      
-      return new Promise((resolve) => {
-        response.data.on('end', () => {
-          resolve(fullText);
         });
-      });
+        
+        return new Promise((resolve) => {
+          response.data.on('end', () => {
+            resolve(fullText);
+          });
+        });
+      } catch (streamError) {
+        // Handle specific error codes
+        if (streamError.response) {
+          const status = streamError.response.status;
+          let errorMessage = '';
+          
+          if (status === 404) {
+            errorMessage = 'Gemini API endpoint not found. The model or API version may be incorrect.';
+          } else if (status === 403) {
+            errorMessage = 'Gemini API access forbidden. Please check your API key.';
+          } else if (status === 429) {
+            errorMessage = 'Gemini API rate limit exceeded. Please try again later.';
+          } else {
+            errorMessage = `Gemini API error (${status}): ${streamError.response.data?.error?.message || 'Unknown error'}`;
+          }
+          
+          console.warn('Gemini API error:', errorMessage);
+          
+          // Send a special message to the client about the error
+          if (onChunk) {
+            onChunk(`\n\n[ERROR: ${errorMessage}]`);
+          }
+          
+          // Return a graceful error message instead of throwing
+          return `I apologize, but I've encountered an error with the Gemini API: ${errorMessage}`;
+        }
+        
+        // For other errors, re-throw
+        throw streamError;
+      }
     } else {
       // For non-streaming responses
-      const response = await axios.post(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
-        requestBody
-      );
-      
-      return response.data.candidates[0].content.parts[0].text;
+      try {
+        const response = await axios.post(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+          requestBody
+        );
+        
+        return response.data.candidates[0].content.parts[0].text;
+      } catch (nonStreamError) {
+        // Handle specific error codes
+        if (nonStreamError.response) {
+          const status = nonStreamError.response.status;
+          let errorMessage = '';
+          
+          if (status === 404) {
+            errorMessage = 'Gemini API endpoint not found. The model or API version may be incorrect.';
+          } else if (status === 403) {
+            errorMessage = 'Gemini API access forbidden. Please check your API key.';
+          } else if (status === 429) {
+            errorMessage = 'Gemini API rate limit exceeded. Please try again later.';
+          } else {
+            errorMessage = `Gemini API error (${status}): ${nonStreamError.response.data?.error?.message || 'Unknown error'}`;
+          }
+          
+          console.warn('Gemini API error:', errorMessage);
+          return `I apologize, but I've encountered an error with the Gemini API: ${errorMessage}`;
+        }
+        
+        // For other errors, re-throw
+        throw nonStreamError;
+      }
     }
   } catch (error) {
     console.error('Gemini Chat API error:', error.response?.data || error.message);
@@ -1186,7 +1273,8 @@ async function callDeepseek(prompt, model = 'deepseek-chat', stream = false, onC
     // Map model names to actual Deepseek model identifiers if needed
     const modelMap = {
       'deepseek-chat': 'deepseek-chat',
-      'deepseek-coder': 'deepseek-coder'
+      'deepseek-coder': 'deepseek-coder',
+      'deepseek-v3': 'deepseek-v3'
     };
     
     const deepseekModel = modelMap[model] || model;
@@ -1307,7 +1395,8 @@ async function callDeepseekChatAPI(conversation, model = 'deepseek-chat', stream
     // Map model names to actual Deepseek model identifiers if needed
     const modelMap = {
       'deepseek-chat': 'deepseek-chat',
-      'deepseek-coder': 'deepseek-coder'
+      'deepseek-coder': 'deepseek-coder',
+      'deepseek-v3': 'deepseek-v3'
     };
     
     const deepseekModel = modelMap[model] || model;
@@ -1327,78 +1416,133 @@ async function callDeepseekChatAPI(conversation, model = 'deepseek-chat', stream
     
     if (stream && onChunk) {
       // For streaming responses
-      const response = await axios.post(
-        'https://api.deepseek.com/v1/chat/completions',
-        requestBody,
-        {
-          headers,
-          responseType: 'stream'
-        }
-      );
-      
-      let fullText = '';
-      
-      // Buffer to accumulate incomplete JSON data
-      let buffer = '';
-      
-      response.data.on('data', (chunk) => {
-        // Add the new chunk to our buffer
-        const chunkStr = chunk.toString();
-        buffer += chunkStr;
+      try {
+        const response = await axios.post(
+          'https://api.deepseek.com/v1/chat/completions',
+          requestBody,
+          {
+            headers,
+            responseType: 'stream'
+          }
+        );
         
-        // Process complete lines from the buffer
-        let newlineIndex;
-        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
-          // Extract a complete line
-          const line = buffer.substring(0, newlineIndex).trim();
-          buffer = buffer.substring(newlineIndex + 1);
+        let fullText = '';
+        
+        // Buffer to accumulate incomplete JSON data
+        let buffer = '';
+        
+        response.data.on('data', (chunk) => {
+          // Add the new chunk to our buffer
+          const chunkStr = chunk.toString();
+          buffer += chunkStr;
           
-          // Skip empty lines
-          if (!line) continue;
-          
-          // Check for end of stream
-          if (line.includes('[DONE]')) return;
-          
-          // Process data lines
-          if (line.startsWith('data:')) {
-            try {
-              // Extract the JSON part
-              const jsonStr = line.substring(5).trim();
-              if (!jsonStr || jsonStr === '') continue;
-              
-              // Try to parse the JSON
-              const data = JSON.parse(jsonStr);
-              
-              // Extract content if available
-              if (data.choices && data.choices[0].delta && data.choices[0].delta.content) {
-                const content = data.choices[0].delta.content;
-                fullText += content;
-                onChunk(content);
+          // Process complete lines from the buffer
+          let newlineIndex;
+          while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+            // Extract a complete line
+            const line = buffer.substring(0, newlineIndex).trim();
+            buffer = buffer.substring(newlineIndex + 1);
+            
+            // Skip empty lines
+            if (!line) continue;
+            
+            // Check for end of stream
+            if (line.includes('[DONE]')) return;
+            
+            // Process data lines
+            if (line.startsWith('data:')) {
+              try {
+                // Extract the JSON part
+                const jsonStr = line.substring(5).trim();
+                if (!jsonStr || jsonStr === '') continue;
+                
+                // Try to parse the JSON
+                const data = JSON.parse(jsonStr);
+                
+                // Extract content if available
+                if (data.choices && data.choices[0].delta && data.choices[0].delta.content) {
+                  const content = data.choices[0].delta.content;
+                  fullText += content;
+                  onChunk(content);
+                }
+              } catch (e) {
+                // Log the error but don't throw - we'll try again with more data
+                console.error('Error parsing streaming data:', e.message);
+                // Don't add the problematic line back to the buffer
+                continue;
               }
-            } catch (e) {
-              // Log the error but don't throw - we'll try again with more data
-              console.error('Error parsing streaming data:', e.message);
-              // Don't add the problematic line back to the buffer
-              continue;
             }
           }
-        }
-      });
-      
-      return new Promise((resolve) => {
-        response.data.on('end', () => {
-          resolve(fullText);
         });
-      });
+        
+        return new Promise((resolve) => {
+          response.data.on('end', () => {
+            resolve(fullText);
+          });
+        });
+      } catch (streamError) {
+        // Handle specific error codes
+        if (streamError.response) {
+          const status = streamError.response.status;
+          let errorMessage = '';
+          
+          if (status === 402) {
+            errorMessage = 'Deepseek API payment required. Please check your account balance.';
+          } else if (status === 403) {
+            errorMessage = 'Deepseek API access forbidden. Please check your API key.';
+          } else if (status === 429) {
+            errorMessage = 'Deepseek API rate limit exceeded. Please try again later.';
+          } else {
+            errorMessage = `Deepseek API error (${status}): ${streamError.response.data?.error?.message || 'Unknown error'}`;
+          }
+          
+          console.warn('Deepseek API error:', errorMessage);
+          
+          // Send a special message to the client about the error
+          if (onChunk) {
+            onChunk(`\n\n[ERROR: ${errorMessage}]`);
+          }
+          
+          // Return a graceful error message instead of throwing
+          return `I apologize, but I've encountered an error with the Deepseek API: ${errorMessage}`;
+        }
+        
+        // For other errors, re-throw
+        throw streamError;
+      }
     } else {
       // For non-streaming responses
-      const response = await axios.post(
-        'https://api.deepseek.com/v1/chat/completions',
-        requestBody,
-        { headers }
-      );
-      
-      return response.data.choices[0].message.content;
+      try {
+        const response = await axios.post(
+          'https://api.deepseek.com/v1/chat/completions',
+          requestBody,
+          { headers }
+        );
+        
+        return response.data.choices[0].message.content;
+      } catch (nonStreamError) {
+        // Handle specific error codes
+        if (nonStreamError.response) {
+          const status = nonStreamError.response.status;
+          let errorMessage = '';
+          
+          if (status === 402) {
+            errorMessage = 'Deepseek API payment required. Please check your account balance.';
+          } else if (status === 403) {
+            errorMessage = 'Deepseek API access forbidden. Please check your API key.';
+          } else if (status === 429) {
+            errorMessage = 'Deepseek API rate limit exceeded. Please try again later.';
+          } else {
+            errorMessage = `Deepseek API error (${status}): ${nonStreamError.response.data?.error?.message || 'Unknown error'}`;
+          }
+          
+          console.warn('Deepseek API error:', errorMessage);
+          return `I apologize, but I've encountered an error with the Deepseek API: ${errorMessage}`;
+        }
+        
+        // For other errors, re-throw
+        throw nonStreamError;
+      }
     }
   } catch (error) {
     console.error('Deepseek Chat API error:', error.response?.data || error.message);

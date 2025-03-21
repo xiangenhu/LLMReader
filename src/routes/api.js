@@ -45,8 +45,11 @@ router.get('/process/stream', (req, res) => {
   llmController.processTextStream(requestData, res)
     .catch(error => {
       console.error('Error in text processing stream:', error);
-      res.write(`event: error\ndata: ${JSON.stringify({ error: error.message })}\n\n`);
-      res.end();
+      // Only write to the response if it hasn't been ended yet
+      if (!res.writableEnded) {
+        res.write(`event: error\ndata: ${JSON.stringify({ error: error.message })}\n\n`);
+        res.end();
+      }
     })
     .finally(() => {
       // Clean up the session data
@@ -86,8 +89,11 @@ router.get('/chat/stream', (req, res) => {
   llmController.processChatStream(requestData, res)
     .catch(error => {
       console.error('Error in chat stream:', error);
-      res.write(`event: error\ndata: ${JSON.stringify({ error: error.message })}\n\n`);
-      res.end();
+      // Only write to the response if it hasn't been ended yet
+      if (!res.writableEnded) {
+        res.write(`event: error\ndata: ${JSON.stringify({ error: error.message })}\n\n`);
+        res.end();
+      }
     })
     .finally(() => {
       // Clean up the session data

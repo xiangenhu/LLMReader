@@ -92,14 +92,31 @@ class LLMChat {
         try {
             this.isProcessing = true;
             
-            // Get model and other settings
+            // Get model
             const model = $('#model').val();
-            const provider = $('#provider').val();
             
-            // Get user preferences
-            const readingLevel = $('#reading-level').val();
-            const language = $('#language').val();
-            const style = $('#style').val();
+            // Determine provider based on model
+            let provider;
+            if (model.startsWith('gpt-')) {
+                provider = 'openai';
+            } else if (model.startsWith('claude-')) {
+                provider = 'anthropic';
+            } else if (model.startsWith('gemini-')) {
+                provider = 'google';
+            } else if (model.startsWith('deepseek-')) {
+                provider = 'deepseek';
+            } else {
+                // Default to OpenAI if model prefix is unknown
+                provider = 'openai';
+            }
+            
+            // Update hidden provider field
+            $('#provider').val(provider);
+            
+            // Get user preferences (if they exist)
+            const readingLevel = $('#reading-level').length ? $('#reading-level').val() : 'original';
+            const language = $('#language').length ? $('#language').val() : 'original';
+            const style = $('#style').length ? $('#style').val() : 'original';
             
             // Prepare conversation history for context
             const conversationHistory = this.messages.map(msg => ({

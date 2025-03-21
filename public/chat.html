@@ -173,20 +173,17 @@
                 <div>
                     <label for="model">Model:</label>
                     <select id="model">
-                        <option value="gpt-4">GPT-4</option>
-                        <option value="gpt-3.5-turbo" selected>GPT-3.5 Turbo</option>
-                        <option value="claude-3">Claude 3</option>
-                        <option value="gemini-pro">Gemini Pro</option>
+                        <option value="gpt-4">GPT-4 (OpenAI)</option>
+                        <option value="gpt-3.5-turbo" selected>GPT-3.5 Turbo (OpenAI)</option>
+                        <option value="claude-3-opus">Claude 3 Opus (Anthropic)</option>
+                        <option value="claude-3-sonnet">Claude 3 Sonnet (Anthropic)</option>
+                        <option value="claude-3-haiku">Claude 3 Haiku (Anthropic)</option>
+                        <option value="gemini-pro">Gemini Pro (Google)</option>
+                        <option value="deepseek-v3">Deepseek V3 (Deepseek)</option>
                     </select>
                 </div>
-                <div>
-                    <label for="provider">Provider:</label>
-                    <select id="provider">
-                        <option value="openai" selected>OpenAI</option>
-                        <option value="anthropic">Anthropic</option>
-                        <option value="google">Google</option>
-                    </select>
-                </div>
+                <!-- Provider is now automatically determined based on the model -->
+                <input type="hidden" id="provider" value="openai">
             </div>
             
             <div id="metrics">
@@ -297,9 +294,26 @@
                 try {
                     this.isProcessing = true;
                     
-                    // Get model and other settings
+                    // Get model
                     const model = $('#model').val();
-                    const provider = $('#provider').val();
+                    
+                    // Determine provider based on model
+                    let provider;
+                    if (model.startsWith('gpt-')) {
+                        provider = 'openai';
+                    } else if (model.startsWith('claude-')) {
+                        provider = 'anthropic';
+                    } else if (model.startsWith('gemini-')) {
+                        provider = 'google';
+                    } else if (model.startsWith('deepseek-')) {
+                        provider = 'deepseek';
+                    } else {
+                        // Default to OpenAI if model prefix is unknown
+                        provider = 'openai';
+                    }
+                    
+                    // Update hidden provider field
+                    $('#provider').val(provider);
                     
                     // Prepare conversation history for context
                     const conversationHistory = this.messages.map(msg => ({

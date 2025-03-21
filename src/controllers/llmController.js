@@ -96,9 +96,12 @@ exports.processTextStream = async (requestData, res) => {
     res.end();
   } catch (error) {
     console.error('Streaming error:', error);
-    res.write(`event: error\ndata: ${JSON.stringify({ error: error.message })}\n\n`);
-    res.end();
-    throw error; // Re-throw to be caught by the caller
+    // Only write to the response if it hasn't been ended yet
+    if (!res.writableEnded) {
+      res.write(`event: error\ndata: ${JSON.stringify({ error: error.message })}\n\n`);
+      res.end();
+    }
+    // Don't re-throw the error - handle it completely here
   }
 };
 
@@ -205,9 +208,12 @@ exports.processChatStream = async (requestData, res) => {
     res.end();
   } catch (error) {
     console.error('Streaming error:', error);
-    res.write(`event: error\ndata: ${JSON.stringify({ error: error.message })}\n\n`);
-    res.end();
-    throw error; // Re-throw to be caught by the caller
+    // Only write to the response if it hasn't been ended yet
+    if (!res.writableEnded) {
+      res.write(`event: error\ndata: ${JSON.stringify({ error: error.message })}\n\n`);
+      res.end();
+    }
+    // Don't re-throw the error - handle it completely here
   }
 };
 
