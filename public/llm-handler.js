@@ -33,10 +33,7 @@ class LLMHandler {
             // Create a variable to store the full response
             let fullResponse = '';
             
-            // Set up event source for streaming
-            const eventSource = new EventSource(`/api/process?_=${Date.now()}`);
-            
-            // Send the request as POST with fetch
+            // First send the POST request to initiate the processing
             fetch('/api/process', {
                 method: 'POST',
                 headers: {
@@ -52,76 +49,87 @@ class LLMHandler {
                     stream: true,
                     sessionId: this.sessionId
                 })
-            });
-            
-            // Handle start event
-            eventSource.addEventListener('start', (event) => {
-                console.log('Streaming started');
-            });
-            
-            // Handle chunk events
-            eventSource.addEventListener('chunk', (event) => {
-                const data = JSON.parse(event.data);
-                fullResponse += data.text;
-                processedTextElement.html(fullResponse);
-            });
-            
-            // Handle complete event
-            eventSource.addEventListener('complete', (event) => {
-                const data = JSON.parse(event.data);
-                
-                // Update metrics
-                this.reader.metrics.processingTimes.push(data.latency || 0);
-                this.reader.metrics.paragraphsProcessed++;
-                this.reader.metrics.promptTokens += data.promptTokens || 0;
-                this.reader.metrics.completionTokens += data.completionTokens || 0;
-                this.reader.metrics.totalTokens += data.totalTokens || 0;
-                this.reader.metricsHandler.updateMetricsDisplay();
-                
-                // Send metrics to server for LRS tracking
-                this.sendMetricsToServer({
-                    action: 'processed',
-                    paragraphId: `paragraph-${Date.now()}`,
-                    latency: data.latency || 0,
-                    interPromptLatency: data.interPromptLatency || 0,
-                    promptTokens: data.promptTokens || 0,
-                    completionTokens: data.completionTokens || 0,
-                    totalTokens: data.totalTokens || 0,
-                    readingLevel: readingLevel,
-                    language: language,
-                    style: style,
-                    model: model
-                });
-                
-                // Update processed count
-                $('#processed-count').text(this.reader.metrics.paragraphsProcessed);
-                
-                // Clean up
-                eventSource.close();
-            });
-            
-            // Handle error event
-            eventSource.addEventListener('error', (event) => {
-                console.error('Error in streaming:', event);
-                
-                // Try to parse error data
-                let errorMessage = 'An error occurred while processing your text.';
-                try {
-                    if (event.data) {
+            }).then(response => {
+                if (response.ok) {
+                    // Set up event source for streaming only after the POST request is successful
+                    const eventSource = new EventSource(`/api/process/stream?sessionId=${this.sessionId}`);
+                    
+                    // Handle start event
+                    eventSource.addEventListener('start', (event) => {
+                        console.log('Streaming started');
+                    });
+                    
+                    // Handle chunk events
+                    eventSource.addEventListener('chunk', (event) => {
                         const data = JSON.parse(event.data);
-                        if (data.error) {
-                            errorMessage = data.error;
+                        fullResponse += data.text;
+                        processedTextElement.html(fullResponse);
+                    });
+                    
+                    // Handle complete event
+                    eventSource.addEventListener('complete', (event) => {
+                        const data = JSON.parse(event.data);
+                        
+                        // Update metrics
+                        this.reader.metrics.processingTimes.push(data.latency || 0);
+                        this.reader.metrics.paragraphsProcessed++;
+                        this.reader.metrics.promptTokens += data.promptTokens || 0;
+                        this.reader.metrics.completionTokens += data.completionTokens || 0;
+                        this.reader.metrics.totalTokens += data.totalTokens || 0;
+                        this.reader.metricsHandler.updateMetricsDisplay();
+                        
+                        // Send metrics to server for LRS tracking
+                        this.sendMetricsToServer({
+                            action: 'processed',
+                            paragraphId: `paragraph-${Date.now()}`,
+                            latency: data.latency || 0,
+                            interPromptLatency: data.interPromptLatency || 0,
+                            promptTokens: data.promptTokens || 0,
+                            completionTokens: data.completionTokens || 0,
+                            totalTokens: data.totalTokens || 0,
+                            readingLevel: readingLevel,
+                            language: language,
+                            style: style,
+                            model: model
+                        });
+                        
+                        // Update processed count
+                        $('#processed-count').text(this.reader.metrics.paragraphsProcessed);
+                        
+                        // Clean up
+                        eventSource.close();
+                    });
+                    
+                    // Handle error event
+                    eventSource.addEventListener('error', (event) => {
+                        console.error('Error in streaming:', event);
+                        
+                        // Try to parse error data
+                        let errorMessage = 'An error occurred while processing your text.';
+                        try {
+                            if (event.data) {
+                                const data = JSON.parse(event.data);
+                                if (data.error) {
+                                    errorMessage = data.error;
+                                }
+                            }
+                        } catch (e) {
+                            console.error('Error parsing error data:', e);
                         }
-                    }
-                } catch (e) {
-                    console.error('Error parsing error data:', e);
+                        
+                        // Update the processed text with error
+                        processedTextElement.html(`<div style="color: red;">Error: ${errorMessage}</div>`);
+                        
+                        // Clean up
+                        eventSource.close();
+                    });
+                } else {
+                    // Handle HTTP error
+                    processedTextElement.html(`<div style="color: red;">Error: Failed to process text. Status: ${response.status}</div>`);
                 }
-                
-                // Update the processed text with error
-                processedTextElement.html(`<div style="color: red;">Error: ${errorMessage}</div>`);
-                
-                // Clean up
-                eventSource.close();
+            }).catch(error => {
+                console.error('Fetch error:', error);
+                processedTextElement.html(`<div style="color: red;">Error: ${error.message || 'Failed to process text'}</div>`);
             });
             
             return fullResponse;

@@ -113,12 +113,21 @@ exports.processText = async (text, readingLevel, language, style, model, stream 
   
   // Determine provider based on model
   let provider = '';
+  let originalModel = model;
+  
   if (model.startsWith('gpt-')) {
     provider = 'openai';
   } else if (model.startsWith('claude-')) {
     provider = 'anthropic';
   } else if (model.startsWith('gemini-')) {
-    provider = 'google';
+    // Check if Gemini API key is properly set
+    if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'your_gemini_api_key_here') {
+      console.warn('Gemini API key not set. Falling back to OpenAI GPT-3.5-turbo.');
+      provider = 'openai';
+      model = 'gpt-3.5-turbo'; // Fall back to GPT-3.5-turbo
+    } else {
+      provider = 'google';
+    }
   } else {
     throw new Error(`Could not determine provider for model: ${model}`);
   }
@@ -195,12 +204,21 @@ exports.processText = async (text, readingLevel, language, style, model, stream 
 exports.processChat = async (message, conversation, model, provider, sessionId = 'default', stream = false, onChunk = null) => {
   // Determine provider based on model if not explicitly provided
   if (!provider) {
+    let originalModel = model;
+    
     if (model.startsWith('gpt-')) {
       provider = 'openai';
     } else if (model.startsWith('claude-')) {
       provider = 'anthropic';
     } else if (model.startsWith('gemini-')) {
-      provider = 'google';
+      // Check if Gemini API key is properly set
+      if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'your_gemini_api_key_here') {
+        console.warn('Gemini API key not set. Falling back to OpenAI GPT-3.5-turbo.');
+        provider = 'openai';
+        model = 'gpt-3.5-turbo'; // Fall back to GPT-3.5-turbo
+      } else {
+        provider = 'google';
+      }
     } else {
       throw new Error(`Could not determine provider for model: ${model}`);
     }
@@ -325,12 +343,21 @@ ${text}`;
   
   // Determine provider based on model
   let provider = '';
+  let originalModel = model;
+  
   if (model.startsWith('gpt-')) {
     provider = 'openai';
   } else if (model.startsWith('claude-')) {
     provider = 'anthropic';
   } else if (model.startsWith('gemini-')) {
-    provider = 'google';
+    // Check if Gemini API key is properly set
+    if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'your_gemini_api_key_here') {
+      console.warn('Gemini API key not set. Falling back to OpenAI GPT-3.5-turbo.');
+      provider = 'openai';
+      model = 'gpt-3.5-turbo'; // Fall back to GPT-3.5-turbo
+    } else {
+      provider = 'google';
+    }
   } else {
     throw new Error(`Could not determine provider for model: ${model}`);
   }
