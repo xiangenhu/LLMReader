@@ -124,7 +124,7 @@ When enabled, clicking on text will not only process it with your chosen LLM but
 
 The SPL assessment URL is configurable through the server's `.env` file using the `ASSESSMENT_URL` variable. By default, it uses:
 ```
-ASSESSMENT_URL=https://splpolyu.skoonline.org/wizard/index.html?wizard=1&teacher=0&Pedagody=["SOCRATIC"]&&DirectSPL=1&DirectRequest=
+ASSESSMENT_URL=https://exp.skoonline.org/wizard/index.html?wizard=1&teacher=0&DirectSPL=1&DirectRequest=
 ```
 
 This allows administrators to change the assessment tool URL without modifying the extension code.

@@ -278,7 +278,7 @@ class LLMReader {
         let response;
         
         switch (model) {
-            case 'gpt-4':
+            case 'gpt-4o-mini':
             case 'gpt-3.5-turbo':
                 response = await this.callOpenAI(prompt, apiKey, model);
                 break;

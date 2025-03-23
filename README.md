@@ -13,7 +13,7 @@ A Node.js application that helps people read PDFs and HTML documents with custom
 - **Content Assessment**: Provides analysis of paragraph content including main topics, difficulty level, terminology, and potential biases
 - **Metrics Tracking**: Records interaction metrics (latency, processing time) and can send to a Learning Record Store (LRS)
 - **Multiple LLM Support**: Works with various language models:
-  - OpenAI GPT-3.5/GPT-4
+  - OpenAI GPT-3.5/gpt-4o-mini
   - Anthropic Claude
   - Google Gemini
 - **Server-side API Key Management**: Securely stores API keys on the server side

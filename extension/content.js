@@ -6,7 +6,7 @@ let selectedText = '';
 let selectedElement = null;
 let iframeContainer = null;
 let processingOverlay = null;
-let assessmentUrl = 'https://splpolyu.skoonline.org/wizard/index.html?wizard=1&teacher=0&Pedagody=["SOCRATIC"]&&DirectSPL=1&DirectRequest='; // Default URL
+let assessmentUrl = 'https://exp.skoonline.org/wizard/index.html?wizard=1&teacher=0&DirectSPL=1&DirectRequest='; // Default URL
 
 // Initialize when the page is loaded
 (async function() {
@@ -46,7 +46,7 @@ async function getSettings() {
       textOnly: false,
       dimUnread: false,
       enableAssessment: false,
-      assessmentUrl: 'https://splpolyu.skoonline.org/wizard/index.html?wizard=1&teacher=0&Pedagody=["SOCRATIC"]&&DirectSPL=1&DirectRequest='
+      assessmentUrl: 'https://exp.skoonline.org/wizard/index.html?wizard=1&teacher=0&DirectSPL=1&DirectRequest='
     }, resolve);
   });
 }

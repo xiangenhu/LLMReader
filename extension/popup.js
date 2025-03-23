@@ -121,7 +121,7 @@ function updateModelOptions() {
   // Add appropriate options based on provider
   switch (provider) {
     case 'openai':
-      addOption(modelSelect, 'GPT-4', 'gpt-4');
+      addOption(modelSelect, 'gpt-4o-mini', 'gpt-4o-mini');
       addOption(modelSelect, 'GPT-3.5 Turbo', 'gpt-3.5-turbo', true);
       break;
     case 'anthropic':

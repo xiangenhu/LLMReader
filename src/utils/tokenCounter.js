@@ -30,7 +30,7 @@ function countOpenAITokens(text, model) {
     
     if (model && model.includes('gpt-3.5-turbo')) {
       encodingName = 'cl100k_base';
-    } else if (model && model.includes('gpt-4')) {
+    } else if (model && model.includes('gpt-4o-mini')) {
       encodingName = 'cl100k_base';
     } else if (model && model.includes('text-davinci')) {
       encodingName = 'p50k_base';
