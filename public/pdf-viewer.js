@@ -34,23 +34,25 @@ class PDFViewer {
         controls.style.alignItems = 'center';
         controls.style.justifyContent = 'center';
         
-        // Previous page button
+        // Previous page button (disabled)
         const prevButton = document.createElement('button');
         prevButton.textContent = 'Previous';
         prevButton.style.marginRight = '10px';
         prevButton.style.padding = '5px 10px';
-        prevButton.addEventListener('click', () => this.prevPage());
+        prevButton.disabled = true;
+        // Navigation event listeners disabled
         
         // Page number display
         this.pageInfo = document.createElement('span');
         this.pageInfo.style.margin = '0 10px';
         
-        // Next page button
+        // Next page button (disabled)
         const nextButton = document.createElement('button');
         nextButton.textContent = 'Next';
         nextButton.style.marginLeft = '10px';
         nextButton.style.padding = '5px 10px';
-        nextButton.addEventListener('click', () => this.nextPage());
+        nextButton.disabled = true;
+        // Navigation event listeners disabled
         
         // Zoom controls
         const zoomOutButton = document.createElement('button');

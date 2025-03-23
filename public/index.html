@@ -400,21 +400,13 @@
                         <select id="model">
                             <option value="gpt-4">GPT-4</option>
                             <option value="gpt-3.5-turbo" selected>GPT-3.5 Turbo</option>
-                            <option value="claude-3">Claude 3</option>
+                            <option value="claude-3-opus">Claude 3 Opus</option>
+                            <option value="claude-3-sonnet">Claude 3 Sonnet</option>
+                            <option value="claude-3-haiku">Claude 3 Haiku</option>
                             <option value="gemini-pro">Gemini Pro</option>
-                            <option value="deepseek-chat">Deepseek Chat</option>
-                            <option value="deepseek-coder">Deepseek Coder</option>
                         </select>
                     </div>
-                    <div>
-                        <label for="provider">Provider:</label>
-                        <select id="provider">
-                            <option value="openai" selected>OpenAI</option>
-                            <option value="anthropic">Anthropic</option>
-                            <option value="google">Google</option>
-                            <option value="deepseek">Deepseek</option>
-                        </select>
-                    </div>
+                    <!-- Provider is automatically selected based on model -->
                     <div style="margin-top: 10px;">
                         <label for="api-key">API Key:</label>
                         <input type="password" id="api-key" placeholder="Enter your API key" style="width: 100%; padding: 5px;">
@@ -541,6 +533,16 @@
                 } else {
                     alert('No text selected or reader not initialized');
                 }
+            });
+            
+            // DeepSeek button handler removed
+            
+            // Sync model and provider (provider dropdown removed, but keeping the logic for backend)
+            $('#model').on('change', function() {
+                const selectedModel = $(this).val();
+                
+                // Provider is automatically determined based on model selection
+                console.log(`Model changed to: ${selectedModel}`);
             });
         });
     </script>

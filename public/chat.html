@@ -182,6 +182,9 @@
                         <option value="deepseek-v3">Deepseek V3 (Deepseek)</option>
                     </select>
                 </div>
+                <div>
+                    <button id="use-deepseek" style="margin-top: 10px;">Use Deepseek V3</button>
+                </div>
                 <!-- Provider is now automatically determined based on the model -->
                 <input type="hidden" id="provider" value="openai">
             </div>
@@ -248,6 +251,39 @@
                 $('#chat-input').on('input', () => {
                     this.resizeTextarea();
                 });
+                
+                // Model selection change
+                $('#model').on('change', () => {
+                    this.updateModelProvider();
+                });
+            }
+            
+            updateModelProvider() {
+                // Get the selected model
+                const selectedModel = $('#model').val();
+                
+                // Get the selected option text
+                const selectedOption = $('#model option:selected').text();
+                
+                console.log(`Model changed to: ${selectedModel} (${selectedOption})`);
+                
+                // Determine provider based on model
+                let provider;
+                if (selectedModel.startsWith('gpt-')) {
+                    provider = 'openai';
+                } else if (selectedModel.startsWith('claude-')) {
+                    provider = 'anthropic';
+                } else if (selectedModel.startsWith('gemini-')) {
+                    provider = 'google';
+                } else if (selectedModel.startsWith('deepseek-')) {
+                    provider = 'deepseek';
+                } else {
+                    // Default to OpenAI if model prefix is unknown
+                    provider = 'openai';
+                }
+                
+                // Update hidden provider field
+                $('#provider').val(provider);
             }
             
             resizeTextarea() {
@@ -432,9 +468,42 @@
             }
         }
 
+        // Function called when model is changed
+        function modelChanged(selectedValue) {
+            // Call the updateModelProvider method on the chat instance
+            if (window.chat) {
+                window.chat.updateModelProvider();
+                
+                // Update the current model display
+                const modelSelect = document.getElementById('model');
+                const selectedOption = modelSelect.options[modelSelect.selectedIndex];
+                document.getElementById('current-model').textContent = `Current model: ${selectedOption.text}`;
+                
+                console.log(`Model changed to: ${selectedValue} (${selectedOption.text})`);
+            }
+        }
+        
         // Initialize the chat when the document is ready
         $(document).ready(() => {
             window.chat = new LLMChat();
+            
+            // Initialize the model provider
+            window.chat.updateModelProvider();
+            
+            // Add event listener for the "Use Deepseek V3" button
+            $('#use-deepseek').off('click').on('click', function() {
+                // Set the model to Deepseek V3
+                $('#model').val('deepseek-v3');
+                
+                // Update the model provider
+                window.chat.updateModelProvider();
+                
+                // Log the change
+                console.log('Switched to Deepseek V3 model');
+                
+                // Add a message to the chat
+                window.chat.addMessageToUI('assistant', 'Now using Deepseek V3 model');
+            });
         });
     </script>
 </body>
