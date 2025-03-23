@@ -473,10 +473,23 @@ class LLMReader {
 $(document).ready(function() {
     window.reader = new LLMReader();
     
+    // Initialize handlers
+    window.reader.pdfHandler = new PDFHandler(window.reader);
+    window.reader.htmlHandler = new HTMLHandler(window.reader);
+    window.reader.llmHandler = new LLMHandler(window.reader);
+    window.reader.clipboardHandler = new ClipboardHandler(window.reader);
+    
     // Add process button functionality
     $('#process-button').on('click', function() {
         if (window.reader) {
             window.reader.processExtractedText();
+        }
+    });
+    
+    // Connect the clipboard button to the clipboard handler
+    $('#clipboard-button-main').on('click', function() {
+        if (window.reader && window.reader.clipboardHandler) {
+            window.reader.clipboardHandler.requestClipboardAccess();
         }
     });
 });

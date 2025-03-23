@@ -59,11 +59,48 @@ class LLMHandler {
                         console.log('Streaming started');
                     });
                     
-                    // Handle chunk events
+                    // Handle chunk events with controlled display speed
+                    let displayBuffer = '';
+                    let isDisplaying = false;
+                    
+                    // Function to display text at a controlled rate
+                    const displayTextSlowly = async (text) => {
+                        if (isDisplaying) return; // Prevent multiple concurrent display operations
+                        
+                        isDisplaying = true;
+                        
+                        // Display each character with a slight delay
+                        for (let i = 0; i < text.length; i++) {
+                            // Update the display with the current buffer plus the next character
+                            processedTextElement.html(fullResponse.substring(0, fullResponse.length - text.length + i + 1));
+                            
+                            // Add a small delay between characters (adjust as needed for desired speed)
+                            await new Promise(resolve => setTimeout(resolve, 15)); // 15ms delay per character
+                        }
+                        
+                        isDisplaying = false;
+                        
+                        // If there's more text in the buffer, continue displaying
+                        if (displayBuffer.length > 0) {
+                            const nextChunk = displayBuffer;
+                            displayBuffer = '';
+                            await displayTextSlowly(nextChunk);
+                        }
+                    };
+                    
                     eventSource.addEventListener('chunk', (event) => {
                         const data = JSON.parse(event.data);
                         fullResponse += data.text;
-                        processedTextElement.html(fullResponse);
+                        
+                        // Add the new text to the display buffer
+                        displayBuffer += data.text;
+                        
+                        // If not currently displaying, start displaying
+                        if (!isDisplaying) {
+                            const textToDisplay = displayBuffer;
+                            displayBuffer = '';
+                            displayTextSlowly(textToDisplay);
+                        }
                     });
                     
                     // Handle complete event

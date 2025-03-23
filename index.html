@@ -129,6 +129,10 @@
                 <p>Drag & drop your PDF here</p>
                 <p>or</p>
                 <input type="file" id="file-input" accept=".pdf">
+                <div style="margin-top: 15px;">
+                    <button id="clipboard-button-main" class="btn" style="width: 100%;">Process Clipboard Text</button>
+                    <p style="margin-top: 10px; font-size: 0.9em; color: #666;">You can also paste text (Ctrl+V) from any source</p>
+                </div>
             </div>
             
             <div class="settings-group">
@@ -239,6 +243,11 @@
         </div>
     </div>
     
+    <script src="public/base-reader.js"></script>
+    <script src="public/pdf-handler.js"></script>
+    <script src="public/html-handler.js"></script>
+    <script src="public/llm-handler.js"></script>
+    <script src="public/clipboard-handler.js"></script>
     <script src="reader.js"></script>
 </body>
 </html>

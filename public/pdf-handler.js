@@ -70,8 +70,50 @@ class PDFHandler {
         // Update UI to show document interface
         this.reader.showDocumentInterface();
         
+        // Show instructions for highlighting
+        this.showHighlightInstructions();
+        
         // Load the document
         this.loadDocument(file);
+    }
+    
+    // Show instructions for highlighting
+    showHighlightInstructions() {
+        // Create a temporary message element
+        const instructionsEl = document.createElement('div');
+        instructionsEl.className = 'highlight-instructions';
+        instructionsEl.style.position = 'fixed';
+        instructionsEl.style.top = '50%';
+        instructionsEl.style.left = '50%';
+        instructionsEl.style.transform = 'translate(-50%, -50%)';
+        instructionsEl.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+        instructionsEl.style.color = 'white';
+        instructionsEl.style.padding = '20px';
+        instructionsEl.style.borderRadius = '5px';
+        instructionsEl.style.zIndex = '1000';
+        instructionsEl.style.maxWidth = '400px';
+        instructionsEl.style.textAlign = 'center';
+        
+        instructionsEl.innerHTML = `
+            <h3>PDF Highlight Mode</h3>
+            <p>Click the "Highlight Mode" button in the PDF viewer to enable highlighting.</p>
+            <p>Then click and drag to highlight text you want to process.</p>
+            <button id="close-instructions" style="padding: 5px 10px; margin-top: 10px;">Got it!</button>
+        `;
+        
+        document.body.appendChild(instructionsEl);
+        
+        // Add event listener to close button
+        document.getElementById('close-instructions').addEventListener('click', () => {
+            document.body.removeChild(instructionsEl);
+        });
+        
+        // Auto-remove after 8 seconds
+        setTimeout(() => {
+            if (document.body.contains(instructionsEl)) {
+                document.body.removeChild(instructionsEl);
+            }
+        }, 8000);
     }
     
     async loadDocument(file) {
@@ -252,21 +294,13 @@ class PDFHandler {
         }
     }
     
-    // Extract and display text automatically
+    // No longer automatically extract text - user must highlight text
     async extractAndDisplayText() {
-        try {
-            console.log('Automatically extracting text from PDF');
-            const text = await this.extractTextFromPdf();
-            
-            if (text && text.trim().length > 0) {
-                console.log('Automatically extracted text:', text.substring(0, 50) + '...');
-                this.reader.extractedText = text;
-            } else {
-                console.log('No text automatically extracted from PDF');
-            }
-        } catch (error) {
-            console.error('Error automatically extracting text from PDF:', error);
-        }
+        // Instead of automatically extracting text, show instructions to highlight
+        console.log('PDF loaded - waiting for user to highlight text');
+        
+        // Show a message in the original-text area
+        $('#original-text').text('Please use the Highlight Mode button in the PDF viewer to select text for processing.');
     }
     
     // Handle PDF click event
