@@ -63,14 +63,8 @@
     <script>
         // Listen for text extraction events
         document.addEventListener('pdf-text-extracted', (e) => {
-            const messageContainer = document.getElementById('message-container');
-            messageContainer.textContent = `Extracted: "${e.detail.text}"`;
-            messageContainer.style.display = 'block';
-            
-            // Hide message after 3 seconds
-            setTimeout(() => {
-                messageContainer.style.display = 'none';
-            }, 3000);
+            // No message display, just log to console
+            console.log('Text extracted:', e.detail.text.substring(0, 50) + '...');
             
             // Send message to parent window if in iframe
             if (window.parent !== window) {

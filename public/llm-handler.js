@@ -74,8 +74,8 @@ class LLMHandler {
                             // Update the display with the current buffer plus the next character
                             processedTextElement.html(fullResponse.substring(0, fullResponse.length - text.length + i + 1));
                             
-                            // Add a small delay between characters (adjust as needed for desired speed)
-                            await new Promise(resolve => setTimeout(resolve, 15)); // 15ms delay per character
+                            // Add a larger delay between characters for slower reading
+                            await new Promise(resolve => setTimeout(resolve, 50)); // 50ms delay per character
                         }
                         
                         isDisplaying = false;

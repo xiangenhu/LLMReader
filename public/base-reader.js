@@ -31,6 +31,7 @@ class LLMReader {
         this.htmlHandler = new HTMLHandler(this);
         this.metricsHandler = new MetricsHandler(this);
         this.llmHandler = new LLMHandler(this);
+        this.clipboardHandler = new ClipboardHandler(this);
         
         // Initialize event listeners
         this.initEventListeners();
@@ -242,9 +243,11 @@ class LLMReader {
         $('#document-iframe').hide();
         $('#chat-container').show();
         
-        // Initialize chat if not already done
-        if (!this.chat) {
+        // Initialize chat if not already done and if LLMChat exists
+        if (!this.chat && typeof LLMChat !== 'undefined') {
             this.chat = new LLMChat();
+        } else if (!this.chat) {
+            console.log('Chat interface requested but LLMChat is not defined');
         }
     }
     

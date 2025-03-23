@@ -24,56 +24,76 @@ class ClipboardHandler {
     }
     
     createClipboardButton() {
-        // Create a button for clipboard processing
-        const clipboardButton = document.createElement('button');
-        clipboardButton.id = 'clipboard-button';
-        clipboardButton.className = 'action-button';
-        clipboardButton.textContent = 'Process Clipboard Text';
-        clipboardButton.style.marginLeft = '10px';
-        clipboardButton.style.padding = '5px 10px';
-        clipboardButton.style.backgroundColor = '#f0f0f0';
-        clipboardButton.style.border = '1px solid #ccc';
-        clipboardButton.style.borderRadius = '4px';
-        clipboardButton.style.cursor = 'pointer';
-        
-        // Add hover effect
-        clipboardButton.addEventListener('mouseover', () => {
-            clipboardButton.style.backgroundColor = '#e0e0e0';
+        // Wait for DOM to be fully loaded
+        $(document).ready(() => {
+            // Create a container div for the clipboard option
+            const clipboardOptionDiv = document.createElement('div');
+            
+            // Create a checkbox (to match the style of other options)
+            const clipboardCheckbox = document.createElement('input');
+            clipboardCheckbox.type = 'checkbox';
+            clipboardCheckbox.id = 'clipboard-option';
+            clipboardCheckbox.checked = true;
+            
+            // Create a label for the checkbox
+            const clipboardLabel = document.createElement('label');
+            clipboardLabel.htmlFor = 'clipboard-option';
+            clipboardLabel.textContent = 'Process Clipboard Text';
+            clipboardLabel.style.cursor = 'pointer';
+            
+            // Create a button for clipboard processing
+            const clipboardButton = document.createElement('button');
+            clipboardButton.id = 'clipboard-button';
+            clipboardButton.className = 'btn btn-secondary';
+            clipboardButton.textContent = 'Paste';
+            clipboardButton.style.marginLeft = '10px';
+            clipboardButton.style.padding = '2px 8px';
+            clipboardButton.style.fontSize = '12px';
+            
+            // Add click event
+            clipboardButton.addEventListener('click', this.requestClipboardAccess);
+            
+            // Add keyboard shortcut info
+            const shortcutInfo = document.createElement('span');
+            shortcutInfo.textContent = ' (Ctrl+V)';
+            shortcutInfo.style.fontSize = '0.8em';
+            shortcutInfo.style.color = '#666';
+            
+            // Append elements to the container
+            clipboardOptionDiv.appendChild(clipboardCheckbox);
+            clipboardOptionDiv.appendChild(clipboardLabel);
+            clipboardOptionDiv.appendChild(clipboardButton);
+            clipboardLabel.appendChild(shortcutInfo);
+            
+            // Find the options header specifically
+            const optionsHeader = document.getElementById('options-header');
+            if (optionsHeader) {
+                // Get the parent of the options header (the settings group)
+                const optionsGroup = optionsHeader.closest('.settings-group');
+                if (optionsGroup) {
+                    // Find the collapsible content within the options group
+                    const collapsibleContent = optionsGroup.querySelector('.collapsible-content');
+                    if (collapsibleContent) {
+                        // Add the clipboard option as the first item in the options list
+                        if (collapsibleContent.firstChild) {
+                            collapsibleContent.insertBefore(clipboardOptionDiv, collapsibleContent.firstChild);
+                        } else {
+                            collapsibleContent.appendChild(clipboardOptionDiv);
+                        }
+                        
+                        console.log('Clipboard option added to options area');
+                    } else {
+                        console.error('Options collapsible content not found');
+                    }
+                } else {
+                    console.error('Options group not found');
+                }
+            } else {
+                console.error('Options header not found');
+                // Fallback: add to body
+                document.body.appendChild(clipboardOptionDiv);
+            }
         });
-        
-        clipboardButton.addEventListener('mouseout', () => {
-            clipboardButton.style.backgroundColor = '#f0f0f0';
-        });
-        
-        // Add click event
-        clipboardButton.addEventListener('click', this.requestClipboardAccess);
-        
-        // Add the button to the UI
-        // Try to find the appropriate container
-        const containers = [
-            document.getElementById('file-controls'),
-            document.querySelector('.file-controls'),
-            document.querySelector('.controls'),
-            document.querySelector('.action-buttons')
-        ];
-        
-        // Find the first available container
-        const container = containers.find(c => c !== null);
-        
-        if (container) {
-            container.appendChild(clipboardButton);
-        } else {
-            // If no container found, add to the top of the document
-            const mainContainer = document.querySelector('main') || document.body;
-            mainContainer.insertBefore(clipboardButton, mainContainer.firstChild);
-        }
-        
-        // Add keyboard shortcut info
-        const shortcutInfo = document.createElement('span');
-        shortcutInfo.textContent = ' (Ctrl+V)';
-        shortcutInfo.style.fontSize = '0.8em';
-        shortcutInfo.style.color = '#666';
-        clipboardButton.appendChild(shortcutInfo);
     }
     
     // Handle paste event
@@ -96,41 +116,7 @@ class ClipboardHandler {
     
     // Request clipboard access
     requestClipboardAccess() {
-        // Show a message to the user
-        const message = document.createElement('div');
-        message.className = 'clipboard-message';
-        message.style.position = 'fixed';
-        message.style.top = '50%';
-        message.style.left = '50%';
-        message.style.transform = 'translate(-50%, -50%)';
-        message.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
-        message.style.color = 'white';
-        message.style.padding = '20px';
-        message.style.borderRadius = '5px';
-        message.style.zIndex = '1000';
-        message.style.maxWidth = '400px';
-        message.style.textAlign = 'center';
-        
-        message.innerHTML = `
-            <h3>Clipboard Access</h3>
-            <p>Please press Ctrl+V or paste text to process clipboard content.</p>
-            <p>You can copy text from any source and paste it here to process.</p>
-            <button id="close-clipboard-message" style="padding: 5px 10px; margin-top: 10px;">Got it!</button>
-        `;
-        
-        document.body.appendChild(message);
-        
-        // Add event listener to close button
-        document.getElementById('close-clipboard-message').addEventListener('click', () => {
-            document.body.removeChild(message);
-        });
-        
-        // Auto-remove after 8 seconds
-        setTimeout(() => {
-            if (document.body.contains(message)) {
-                document.body.removeChild(message);
-            }
-        }, 8000);
+        console.log('Requesting clipboard access');
         
         // Try to read from clipboard directly if the API is available
         if (navigator.clipboard && navigator.clipboard.readText) {
@@ -138,21 +124,52 @@ class ClipboardHandler {
                 .then(text => {
                     if (text && text.trim().length > 0) {
                         this.processClipboardText(text);
-                        
-                        // Remove the message if we successfully got text
-                        if (document.body.contains(message)) {
-                            document.body.removeChild(message);
-                        }
+                    } else {
+                        console.log('No text found in clipboard');
+                        // Show a small notification instead of a popup
+                        this.showNotification('No text found in clipboard. Copy some text and try again.');
                     }
                 })
                 .catch(err => {
                     console.error('Failed to read clipboard contents: ', err);
-                    // We'll rely on the paste event instead
+                    // Show a small notification instead of a popup
+                    this.showNotification('Press Ctrl+V to paste text from clipboard');
+                    // Focus on the document to capture the paste event
+                    document.body.focus();
                 });
+        } else {
+            // Show a small notification instead of a popup
+            this.showNotification('Press Ctrl+V to paste text from clipboard');
+            // Focus on the document to capture the paste event
+            document.body.focus();
         }
+    }
+    
+    // Show a small notification that auto-disappears
+    showNotification(message) {
+        const notification = document.createElement('div');
+        notification.className = 'clipboard-notification';
+        notification.style.position = 'fixed';
+        notification.style.bottom = '20px';
+        notification.style.right = '20px';
+        notification.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+        notification.style.color = 'white';
+        notification.style.padding = '10px 15px';
+        notification.style.borderRadius = '4px';
+        notification.style.zIndex = '1000';
+        notification.style.maxWidth = '300px';
+        notification.style.fontSize = '14px';
+        notification.style.boxShadow = '0 2px 5px rgba(0, 0, 0, 0.2)';
+        notification.textContent = message;
         
-        // Focus on the document to capture the paste event
-        document.body.focus();
+        document.body.appendChild(notification);
+        
+        // Auto-remove after 3 seconds
+        setTimeout(() => {
+            if (document.body.contains(notification)) {
+                document.body.removeChild(notification);
+            }
+        }, 3000);
     }
     
     // Process text from clipboard

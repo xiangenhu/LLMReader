@@ -30,22 +30,39 @@ class PDFViewer {
         // Create navigation controls
         this.createControls();
         
-        // Initialize highlighting functionality
-        this.isHighlighting = false;
-        this.highlightStartX = null;
-        this.highlightStartY = null;
-        this.highlightedText = '';
-        
-        // Add highlighting overlay
-        this.highlightOverlay = document.createElement('div');
-        this.highlightOverlay.className = 'highlight-overlay';
-        this.highlightOverlay.style.position = 'absolute';
-        this.highlightOverlay.style.pointerEvents = 'none';
-        this.highlightOverlay.style.backgroundColor = 'rgba(255, 255, 0, 0.3)';
-        this.highlightOverlay.style.display = 'none';
-        this.highlightOverlay.style.zIndex = '100';
-        this.highlightOverlay.style.border = '1px solid #FFA500';
-        this.wrapper.appendChild(this.highlightOverlay);
+    // Disable highlighting functionality
+    this.isHighlighting = false;
+    this.highlightStartX = null;
+    this.highlightStartY = null;
+    this.highlightedText = '';
+    
+    // Add a message about copy-paste mode
+    const copyPasteMessage = document.createElement('div');
+    copyPasteMessage.className = 'copy-paste-message';
+    copyPasteMessage.style.position = 'absolute';
+    copyPasteMessage.style.top = '10px';
+    copyPasteMessage.style.left = '50%';
+    copyPasteMessage.style.transform = 'translateX(-50%)';
+    copyPasteMessage.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    copyPasteMessage.style.color = 'white';
+    copyPasteMessage.style.padding = '10px 15px';
+    copyPasteMessage.style.borderRadius = '5px';
+    copyPasteMessage.style.zIndex = '100';
+    copyPasteMessage.style.fontSize = '14px';
+    copyPasteMessage.style.textAlign = 'center';
+    copyPasteMessage.textContent = 'Copy & Paste Mode: Select text, copy (Ctrl+C), and paste (Ctrl+V)';
+    this.wrapper.appendChild(copyPasteMessage);
+    
+    // Auto-hide the message after 10 seconds
+    setTimeout(() => {
+        copyPasteMessage.style.opacity = '0';
+        copyPasteMessage.style.transition = 'opacity 1s ease';
+        setTimeout(() => {
+            if (this.wrapper.contains(copyPasteMessage)) {
+                this.wrapper.removeChild(copyPasteMessage);
+            }
+        }, 1000);
+    }, 10000);
         
         // Add debug info for highlighting (will be hidden in production)
         this.debugInfo = document.createElement('div');
@@ -106,18 +123,15 @@ class PDFViewer {
         zoomInButton.style.padding = '5px 10px';
         zoomInButton.addEventListener('click', () => this.zoomIn());
         
-        // Highlight mode toggle button
-        const highlightButton = document.createElement('button');
-        highlightButton.textContent = 'Highlight Mode';
-        highlightButton.style.marginLeft = '20px';
-        highlightButton.style.padding = '5px 10px';
-        highlightButton.style.backgroundColor = '#f0f0f0';
-        highlightButton.addEventListener('click', () => {
-            this.toggleHighlightMode();
-            // Update button appearance
-            highlightButton.style.backgroundColor = this.isHighlighting ? '#ffeb3b' : '#f0f0f0';
-            highlightButton.style.fontWeight = this.isHighlighting ? 'bold' : 'normal';
-        });
+        // Copy & Paste mode label (not a button)
+        const copyPasteLabel = document.createElement('div');
+        copyPasteLabel.textContent = 'Copy & Paste Mode';
+        copyPasteLabel.style.marginLeft = '20px';
+        copyPasteLabel.style.padding = '5px 10px';
+        copyPasteLabel.style.backgroundColor = '#4CAF50';
+        copyPasteLabel.style.color = 'white';
+        copyPasteLabel.style.fontWeight = 'bold';
+        copyPasteLabel.style.borderRadius = '4px';
         
         // Add elements to controls
         controls.appendChild(prevButton);
@@ -125,26 +139,17 @@ class PDFViewer {
         controls.appendChild(nextButton);
         controls.appendChild(zoomOutButton);
         controls.appendChild(zoomInButton);
-        controls.appendChild(highlightButton);
+        controls.appendChild(copyPasteLabel);
         
         // Insert controls at the top of container
         this.container.insertBefore(controls, this.container.firstChild);
     }
     
-    // Toggle highlight mode
+    // Toggle highlight mode (disabled in copy-paste mode)
     toggleHighlightMode() {
-        this.isHighlighting = !this.isHighlighting;
-        
-        // Update cursor style based on mode
-        this.canvas.style.cursor = this.isHighlighting ? 'crosshair' : 'default';
-        
-        // Show message to user
-        const message = this.isHighlighting 
-            ? 'Highlight Mode ON: Click and drag to highlight text' 
-            : 'Highlight Mode OFF';
-            
-        // Display message to user
-        alert(message);
+        // Do nothing - highlighting is disabled in copy-paste mode
+        console.log('Highlight mode is disabled in copy-paste mode');
+        return;
     }
     
     // Load a PDF from URL
@@ -489,9 +494,8 @@ class PDFViewer {
                 }
             }
             
-            // If we still couldn't extract text, show a message
+            // If we still couldn't extract text, log a message (but don't show alert)
             console.log('No text found in highlighted area');
-            alert('No text found in highlighted area. Try highlighting a different section.');
             
         } catch (error) {
             console.error('Error extracting highlighted text:', error);
@@ -667,7 +671,7 @@ class PDFViewer {
                 this.sendExtractedText(pageText);
             } else {
                 console.log('No text found on page');
-                alert('No text found on this page. Try another page or use highlight mode.');
+                // No alert, just log to console
             }
         } catch (error) {
             console.error('Error extracting text:', error);

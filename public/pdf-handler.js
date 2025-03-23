@@ -23,17 +23,8 @@ class PDFHandler {
     handleIframeMessage(event) {
         // Check if the message is from our iframe
         if (event.data && event.data.type === 'pdf-click') {
-            console.log('Received click message from iframe:', event.data);
-            
-            // Create a synthetic click event
-            const clickEvent = {
-                clientX: event.data.x,
-                clientY: event.data.y,
-                preventDefault: () => {}
-            };
-            
-            // Handle the click
-            this.handlePdfClick(clickEvent);
+            console.log('PDF click events are disabled');
+            // Do not process click events
         } else if (event.data && event.data.type === 'pdf-text-extracted') {
             console.log('Received extracted text from iframe:', event.data.text);
             
@@ -77,43 +68,9 @@ class PDFHandler {
         this.loadDocument(file);
     }
     
-    // Show instructions for highlighting
+    // Show instructions for highlighting (no popup, just log to console)
     showHighlightInstructions() {
-        // Create a temporary message element
-        const instructionsEl = document.createElement('div');
-        instructionsEl.className = 'highlight-instructions';
-        instructionsEl.style.position = 'fixed';
-        instructionsEl.style.top = '50%';
-        instructionsEl.style.left = '50%';
-        instructionsEl.style.transform = 'translate(-50%, -50%)';
-        instructionsEl.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
-        instructionsEl.style.color = 'white';
-        instructionsEl.style.padding = '20px';
-        instructionsEl.style.borderRadius = '5px';
-        instructionsEl.style.zIndex = '1000';
-        instructionsEl.style.maxWidth = '400px';
-        instructionsEl.style.textAlign = 'center';
-        
-        instructionsEl.innerHTML = `
-            <h3>PDF Highlight Mode</h3>
-            <p>Click the "Highlight Mode" button in the PDF viewer to enable highlighting.</p>
-            <p>Then click and drag to highlight text you want to process.</p>
-            <button id="close-instructions" style="padding: 5px 10px; margin-top: 10px;">Got it!</button>
-        `;
-        
-        document.body.appendChild(instructionsEl);
-        
-        // Add event listener to close button
-        document.getElementById('close-instructions').addEventListener('click', () => {
-            document.body.removeChild(instructionsEl);
-        });
-        
-        // Auto-remove after 8 seconds
-        setTimeout(() => {
-            if (document.body.contains(instructionsEl)) {
-                document.body.removeChild(instructionsEl);
-            }
-        }, 8000);
+        console.log('PDF loaded - copy and paste mode active');
     }
     
     async loadDocument(file) {
@@ -176,7 +133,7 @@ class PDFHandler {
             
         } catch (error) {
             console.error('Error loading PDF:', error);
-            alert('Error loading PDF: ' + error.message);
+            // No alert, just log to console
         }
     }
     
@@ -238,7 +195,7 @@ class PDFHandler {
     
     setupIframeInteractions(iframe) {
         try {
-            console.log('Setting up PDF iframe interactions');
+            console.log('PDF events disabled - only copy and paste allowed');
             
             // If iframe is not provided, get it from the DOM
             if (!iframe) {
@@ -250,48 +207,37 @@ class PDFHandler {
                 return;
             }
             
-            // Remove any existing click handlers to avoid duplicates
+            // Remove any existing click handlers
             iframe.removeEventListener('click', this.handlePdfClick);
             iframe.removeEventListener('mousedown', this.handlePdfClick);
             
-            // Add click event listener to the iframe element itself
-            iframe.addEventListener('click', this.handlePdfClick);
+            // Remove click handler from document body
+            document.body.removeEventListener('click', this.handlePdfClick);
             
-            // Also add a mousedown event listener as a backup
-            iframe.addEventListener('mousedown', this.handlePdfClick);
-            
-            // Add click handler to the document body as well to catch clicks that might be outside the iframe
-            document.body.addEventListener('click', (e) => {
-                // Check if the click is within the iframe
-                const rect = iframe.getBoundingClientRect();
-                if (
-                    e.clientX >= rect.left &&
-                    e.clientX <= rect.right &&
-                    e.clientY >= rect.top &&
-                    e.clientY <= rect.bottom
-                ) {
-                    console.log('Click detected in iframe area from body handler');
-                    this.handlePdfClick(e);
-                }
-            });
-            
-            // Try to add a click handler to the iframe's content document if possible
+            // Try to remove click handler from iframe's content document if possible
             try {
                 if (iframe.contentDocument) {
-                    iframe.contentDocument.addEventListener('click', this.handlePdfClick);
-                    console.log('Added click handler to iframe content document');
+                    iframe.contentDocument.removeEventListener('click', this.handlePdfClick);
                 }
             } catch (contentError) {
-                console.error('Could not add click handler to iframe content document:', contentError);
+                console.error('Could not access iframe content document:', contentError);
             }
             
-            console.log('PDF iframe click handlers set up successfully');
+            console.log('PDF events disabled successfully');
             
-            // Extract text automatically after loading
-            this.extractAndDisplayText();
+            // Show instructions for copy and paste
+            this.showCopyPasteInstructions();
         } catch (error) {
-            console.error('Error setting up PDF iframe interactions:', error);
+            console.error('Error disabling PDF events:', error);
         }
+    }
+    
+    // Show instructions for copy and paste (no popup, just update text area)
+    showCopyPasteInstructions() {
+        console.log('Copy & Paste Mode: Select text in the PDF, copy it (Ctrl+C), and paste it (Ctrl+V)');
+        
+        // Show a message in the original-text area
+        $('#original-text').text('Select text in the PDF, copy it (Ctrl+C), and paste it (Ctrl+V) to process.');
     }
     
     // No longer automatically extract text - user must highlight text
@@ -334,8 +280,8 @@ class PDFHandler {
                 this.reader.llmHandler.sendTextToAssessment(text);
             });
         } else {
-            console.log('No text extracted at click position');
-            alert('No text could be extracted at the click position. Try clicking on a paragraph or text element.');
+            console.log('No text extracted from PDF');
+            // No alert, just log to console
         }
     }
     
