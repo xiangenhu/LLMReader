@@ -22,8 +22,11 @@ class PDFViewer {
         this.wrapper.style.margin = '0 auto';
         this.container.appendChild(this.wrapper);
         
-        // Create canvas
+        // Create canvas with text selection enabled
         this.canvas = document.createElement('canvas');
+        this.canvas.style.userSelect = 'text'; // Enable text selection
+        this.canvas.style.webkitUserSelect = 'text'; // For Safari
+        this.canvas.style.cursor = 'text'; // Show text cursor
         this.ctx = this.canvas.getContext('2d');
         this.wrapper.appendChild(this.canvas);
         
@@ -90,25 +93,23 @@ class PDFViewer {
         controls.style.justifyContent = 'center';
         controls.style.marginBottom = '10px';
         
-        // Previous page button (disabled)
+        // Previous page button
         const prevButton = document.createElement('button');
         prevButton.textContent = 'Previous';
         prevButton.style.marginRight = '10px';
         prevButton.style.padding = '5px 10px';
-        prevButton.disabled = true;
-        // Navigation event listeners disabled
+        prevButton.addEventListener('click', () => this.prevPage());
         
         // Page number display
         this.pageInfo = document.createElement('span');
         this.pageInfo.style.margin = '0 10px';
         
-        // Next page button (disabled)
+        // Next page button
         const nextButton = document.createElement('button');
         nextButton.textContent = 'Next';
         nextButton.style.marginLeft = '10px';
         nextButton.style.padding = '5px 10px';
-        nextButton.disabled = true;
-        // Navigation event listeners disabled
+        nextButton.addEventListener('click', () => this.nextPage());
         
         // Zoom controls
         const zoomOutButton = document.createElement('button');
@@ -172,96 +173,11 @@ class PDFViewer {
         });
     }
     
-    // Set up event listeners for highlighting
+    // Set up event listeners for highlighting (completely disabled in copy-paste mode)
     setupHighlightListeners() {
-        // Mouse down - start highlighting
-        this.canvas.addEventListener('mousedown', (e) => {
-            if (this.isHighlighting) {
-                const rect = this.canvas.getBoundingClientRect();
-                this.highlightStartX = e.clientX - rect.left;
-                this.highlightStartY = e.clientY - rect.top;
-                
-                // Initialize highlight overlay
-                this.highlightOverlay.style.left = `${this.highlightStartX}px`;
-                this.highlightOverlay.style.top = `${this.highlightStartY}px`;
-                this.highlightOverlay.style.width = '0px';
-                this.highlightOverlay.style.height = '0px';
-                this.highlightOverlay.style.display = 'block';
-                
-                // Update debug info
-                this.updateDebugInfo('Start', this.highlightStartX, this.highlightStartY);
-                
-                e.preventDefault(); // Prevent text selection
-            } else {
-                // If not in highlight mode, handle as a regular click
-                this.handleCanvasClick(e);
-            }
-        });
-        
-        // Mouse move - update highlight rectangle
-        this.canvas.addEventListener('mousemove', (e) => {
-            if (this.isHighlighting && this.highlightStartX !== null) {
-                const rect = this.canvas.getBoundingClientRect();
-                const currentX = e.clientX - rect.left;
-                const currentY = e.clientY - rect.top;
-                
-                // Calculate dimensions
-                const left = Math.min(this.highlightStartX, currentX);
-                const top = Math.min(this.highlightStartY, currentY);
-                const width = Math.abs(currentX - this.highlightStartX);
-                const height = Math.abs(currentY - this.highlightStartY);
-                
-                // Update overlay
-                this.highlightOverlay.style.left = `${left}px`;
-                this.highlightOverlay.style.top = `${top}px`;
-                this.highlightOverlay.style.width = `${width}px`;
-                this.highlightOverlay.style.height = `${height}px`;
-                
-                // Update debug info
-                this.updateDebugInfo('Move', currentX, currentY, left, top, width, height);
-            }
-        });
-        
-        // Mouse up - finish highlighting and extract text
-        this.canvas.addEventListener('mouseup', async (e) => {
-            if (this.isHighlighting && this.highlightStartX !== null) {
-                const rect = this.canvas.getBoundingClientRect();
-                const endX = e.clientX - rect.left;
-                const endY = e.clientY - rect.top;
-                
-                // Update debug info
-                this.updateDebugInfo('End', endX, endY);
-                
-                // Extract text from the highlighted area
-                await this.extractHighlightedText(
-                    this.highlightStartX, 
-                    this.highlightStartY, 
-                    endX, 
-                    endY
-                );
-                
-                // Reset highlight state
-                this.highlightStartX = null;
-                this.highlightStartY = null;
-                
-                // Hide overlay after a short delay
-                setTimeout(() => {
-                    this.highlightOverlay.style.display = 'none';
-                }, 1000);
-            }
-        });
-        
-        // Mouse leave - cancel highlighting
-        this.canvas.addEventListener('mouseleave', () => {
-            if (this.isHighlighting && this.highlightStartX !== null) {
-                this.highlightStartX = null;
-                this.highlightStartY = null;
-                this.highlightOverlay.style.display = 'none';
-                
-                // Update debug info
-                this.updateDebugInfo('Cancel', 0, 0);
-            }
-        });
+        // No event listeners for highlighting - we're in copy-paste mode only
+        console.log('Highlight listeners disabled - using copy-paste mode only');
+        // No mouse event listeners are added - users must use browser's native text selection
     }
     
     // Update debug info
@@ -297,7 +213,58 @@ class PDFViewer {
                 viewport: viewport
             };
             
+            // Remove any existing text layer
+            if (this.textLayer) {
+                this.wrapper.removeChild(this.textLayer);
+            }
+            
+            // Create text layer for selection
+            this.textLayer = document.createElement('div');
+            this.textLayer.className = 'textLayer';
+            this.textLayer.style.position = 'absolute';
+            this.textLayer.style.left = '0';
+            this.textLayer.style.top = '0';
+            this.textLayer.style.width = `${viewport.width}px`;
+            this.textLayer.style.height = `${viewport.height}px`;
+            this.textLayer.style.overflow = 'hidden';
+            this.textLayer.style.opacity = '1'; // Make fully visible
+            this.textLayer.style.color = 'transparent'; // Text is transparent
+            this.textLayer.style.userSelect = 'text';
+            this.textLayer.style.webkitUserSelect = 'text';
+            this.textLayer.style.mozUserSelect = 'text';
+            this.textLayer.style.msUserSelect = 'text';
+            this.textLayer.style.cursor = 'text';
+            this.textLayer.style.zIndex = '1'; // Place above canvas
+            
+            // Add CSS for text selection highlighting
+            const style = document.createElement('style');
+            style.textContent = `
+                .textLayer ::selection {
+                    background: rgba(0, 0, 255, 0.3);
+                }
+                .textLayer > span {
+                    cursor: text;
+                }
+                .textLayer > span::selection {
+                    background: rgba(0, 0, 255, 0.3);
+                }
+            `;
+            document.head.appendChild(style);
+            
+            this.wrapper.appendChild(this.textLayer);
+            
             const renderTask = page.render(renderContext);
+            
+            // Get the text content of the page
+            page.getTextContent().then(textContent => {
+                // Create text layer
+                pdfjsLib.renderTextLayer({
+                    textContent: textContent,
+                    container: this.textLayer,
+                    viewport: viewport,
+                    textDivs: []
+                });
+            });
             
             // Wait for rendering to finish
             renderTask.promise.then(() => {
@@ -519,163 +486,12 @@ class PDFViewer {
         }
     }
     
-    // Handle canvas click for text extraction (when not in highlight mode)
+    // Handle canvas click for text extraction (completely disabled in copy-paste mode)
     async handleCanvasClick(e) {
-        // Get click coordinates relative to canvas
-        const rect = this.canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        
-        console.log('Canvas clicked at:', x, y);
-        
-        try {
-            // Get current page
-            const page = await this.pdfDoc.getPage(this.pageNum);
-            
-            // Get text content
-            const textContent = await page.getTextContent();
-            
-            // Get annotations (which might include buttons/form fields)
-            const annotations = await page.getAnnotations();
-            
-            // Create a set of positions to ignore (button positions)
-            const buttonPositions = new Set();
-            
-            // Add annotation positions to ignore (buttons, form fields, etc.)
-            for (const annotation of annotations) {
-                if (annotation.subtype === 'Widget' || // Form fields
-                    annotation.fieldType === 'Btn') {  // Buttons
-                    
-                    // Add the position to ignore
-                    if (annotation.rect) {
-                        const centerX = (annotation.rect[0] + annotation.rect[2]) / 2;
-                        const centerY = (annotation.rect[1] + annotation.rect[3]) / 2;
-                        buttonPositions.add(`${Math.round(centerX)},${Math.round(centerY)}`);
-                    }
-                }
-            }
-            
-            // Filter out items that are likely buttons
-            const nonButtonItems = textContent.items.filter(item => {
-                // Check if item position matches any button position
-                const itemPos = `${Math.round(item.transform[4])},${Math.round(item.transform[5])}`;
-                if (buttonPositions.has(itemPos)) {
-                    return false;
-                }
-                
-                // Also filter based on text content that looks like a button
-                return !this.isLikelyButton(item);
-            });
-            
-            // Convert viewport coordinates to PDF coordinates
-            const viewport = page.getViewport({ scale: this.scale });
-            const pdfX = x / this.scale;
-            const pdfY = (viewport.height - y) / this.scale;
-            
-            // Find text items near click position
-            const clickedItems = [];
-            const yThreshold = 5; // Items within this vertical distance are considered part of the same line
-            let clickedY = null;
-            let minDistance = 50; // Initial threshold for finding the closest item
-            
-            // First, find the item closest to the click
-            for (const item of nonButtonItems) {
-                // Calculate distance from click to text item
-                const dx = Math.abs(item.transform[4] - pdfX);
-                const dy = Math.abs(item.transform[5] - pdfY);
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                
-                if (distance < minDistance) {
-                    minDistance = distance;
-                    clickedY = item.transform[5]; // Y position of the closest item
-                }
-            }
-            
-            // If we found a closest item, collect all items on the same line and nearby lines
-            if (clickedY !== null) {
-                // Sort items by y position (line) and then by x position (order in line)
-                const sortedItems = [...nonButtonItems].sort((a, b) => {
-                    // First sort by y position (with some tolerance for same line)
-                    const yDiff = Math.abs(a.transform[5] - b.transform[5]);
-                    if (yDiff > yThreshold) {
-                        return b.transform[5] - a.transform[5]; // Descending y order
-                    }
-                    // If on same line, sort by x position
-                    return a.transform[4] - b.transform[4]; // Ascending x order
-                });
-                
-                // Group items by line (y position)
-                const lines = [];
-                let currentLine = [];
-                let currentY = null;
-                
-                for (const item of sortedItems) {
-                    if (currentY === null) {
-                        currentY = item.transform[5];
-                        currentLine.push(item);
-                    } else if (Math.abs(item.transform[5] - currentY) <= yThreshold) {
-                        // Same line
-                        currentLine.push(item);
-                    } else {
-                        // New line
-                        lines.push(currentLine);
-                        currentLine = [item];
-                        currentY = item.transform[5];
-                    }
-                }
-                
-                // Add the last line if not empty
-                if (currentLine.length > 0) {
-                    lines.push(currentLine);
-                }
-                
-                // Find the line containing the clicked position
-                let clickedLineIndex = -1;
-                for (let i = 0; i < lines.length; i++) {
-                    const line = lines[i];
-                    for (const item of line) {
-                        if (Math.abs(item.transform[5] - clickedY) <= yThreshold) {
-                            clickedLineIndex = i;
-                            break;
-                        }
-                    }
-                    if (clickedLineIndex !== -1) break;
-                }
-                
-                // Extract text from the clicked line and surrounding lines (paragraph)
-                if (clickedLineIndex !== -1) {
-                    // Get a few lines before and after to form a paragraph
-                    const startLine = Math.max(0, clickedLineIndex - 2);
-                    const endLine = Math.min(lines.length - 1, clickedLineIndex + 2);
-                    
-                    let extractedText = '';
-                    for (let i = startLine; i <= endLine; i++) {
-                        const lineText = lines[i].map(item => item.str).join(' ');
-                        extractedText += lineText + ' ';
-                    }
-                    
-                    extractedText = extractedText.trim();
-                    
-                    if (extractedText) {
-                        console.log('Extracted text:', extractedText);
-                        this.sendExtractedText(extractedText);
-                        return;
-                    }
-                }
-            }
-            
-            // Fallback: if we couldn't extract a paragraph, get all text from the page (excluding buttons)
-            const pageText = nonButtonItems.map(item => item.str).join(' ');
-            if (pageText) {
-                console.log('Extracted page text (fallback)');
-                this.sendExtractedText(pageText);
-            } else {
-                console.log('No text found on page');
-                // No alert, just log to console
-            }
-        } catch (error) {
-            console.error('Error extracting text:', error);
-        }
+        // Do nothing - automatic text extraction is disabled
+        console.log('Automatic text extraction is disabled. Please use copy and paste instead.');
+        // No text extraction, no popups
+        return;
     }
 }
 

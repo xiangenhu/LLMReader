@@ -125,13 +125,61 @@
     </div>
     <div id="main">
         <div id="sidebar">
-            <div id="file-drop">
-                <p>Drag & drop your PDF here</p>
-                <p>or</p>
-                <input type="file" id="file-input" accept=".pdf">
+            <div class="settings-group">
+                <h3>Document Source</h3>
+                <div>
+                    <input type="radio" id="pdf-type" name="file-type" value="pdf" checked>
+                    <label for="pdf-type">PDF</label>
+                    
+                    <input type="radio" id="html-type" name="file-type" value="html" style="margin-left: 15px;">
+                    <label for="html-type">HTML</label>
+                    
+                    <input type="radio" id="chat-type" name="file-type" value="chat" style="margin-left: 15px;">
+                    <label for="chat-type">Chat</label>
+                </div>
+            </div>
+            
+            <!-- PDF Form -->
+            <div id="pdf-form">
+                <div id="file-drop">
+                    <p>Drag & drop your PDF here</p>
+                    <p>or</p>
+                    <input type="file" id="file-input" accept=".pdf">
+                    <div style="margin-top: 15px;">
+                        <button id="clipboard-button-main" class="btn" style="width: 100%;">Process Clipboard Text</button>
+                        <p style="margin-top: 10px; font-size: 0.9em; color: #666;">You can also paste text (Ctrl+V) from any source</p>
+                    </div>
+                </div>
+                
                 <div style="margin-top: 15px;">
-                    <button id="clipboard-button-main" class="btn" style="width: 100%;">Process Clipboard Text</button>
-                    <p style="margin-top: 10px; font-size: 0.9em; color: #666;">You can also paste text (Ctrl+V) from any source</p>
+                    <label for="url-input">Or enter PDF URL:</label>
+                    <div style="display: flex; margin-top: 5px;">
+                        <input type="text" id="url-input" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px 0 0 4px;">
+                        <button id="fetch-url-btn" class="btn" style="border-radius: 0 4px 4px 0;">Fetch</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- HTML Form -->
+            <div id="html-form" style="display: none;">
+                <div style="margin-bottom: 15px;">
+                    <label for="html-url-input">Enter HTML URL:</label>
+                    <div style="display: flex; margin-top: 5px;">
+                        <input type="text" id="html-url-input" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px 0 0 4px;">
+                        <button id="html-fetch-url-btn" class="btn" style="border-radius: 0 4px 4px 0;">Fetch</button>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 15px;">
+                    <button id="extract-html-text-btn" class="btn" style="width: 100%;">Extract All Text</button>
+                </div>
+            </div>
+            
+            <!-- Chat Form -->
+            <div id="chat-form" style="display: none;">
+                <p>Start chatting with the LLM using the chat interface.</p>
+                <div style="margin-top: 15px;">
+                    <button id="clipboard-button-chat" class="btn" style="width: 100%;">Process Clipboard Text</button>
                 </div>
             </div>
             

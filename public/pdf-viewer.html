@@ -13,21 +13,106 @@
             display: flex;
             flex-direction: column;
             height: 100vh;
+            overflow: hidden;
+        }
+        
+        .controls {
+            padding: 10px;
+            background-color: #f5f5f5;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .copy-paste-label {
+            background-color: #4CAF50;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            margin-left: 20px;
+        }
+        
+        .instructions {
+            position: absolute;
+            top: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            z-index: 100;
+            font-size: 14px;
+            text-align: center;
+            transition: opacity 1s ease;
         }
         
         #pdf-container {
             flex: 1;
+            position: relative;
+            width: 100%;
+            height: calc(100% - 50px);
             overflow: auto;
+            background-color: #f0f0f0;
             display: flex;
             flex-direction: column;
             align-items: center;
-            background-color: #f0f0f0;
             padding: 20px;
+        }
+        
+        #pdf-viewer {
+            position: relative;
+            margin: 0 auto;
         }
         
         canvas {
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
             background-color: white;
+        }
+        
+        .textLayer {
+            position: absolute;
+            left: 0;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            overflow: hidden;
+            opacity: 0.2;
+            line-height: 1.0;
+        }
+        
+        .textLayer > span {
+            color: transparent;
+            position: absolute;
+            white-space: pre;
+            cursor: text;
+            transform-origin: 0% 0%;
+        }
+        
+        .textLayer ::selection {
+            background: rgba(0, 0, 255, 0.3);
+        }
+        
+        .textLayer .highlight {
+            background-color: rgba(180, 0, 170, 0.2);
+        }
+        
+        .textLayer .highlight.begin {
+            border-radius: 4px 0 0 4px;
+        }
+        
+        .textLayer .highlight.end {
+            border-radius: 0 4px 4px 0;
+        }
+        
+        .textLayer .highlight.middle {
+            border-radius: 0;
+        }
+        
+        .textLayer .highlight.selected {
+            background-color: rgba(0, 100, 0, 0.2);
         }
         
         button {
@@ -36,50 +121,347 @@
             border: none;
             border-radius: 4px;
             cursor: pointer;
+            padding: 5px 10px;
+            margin: 0 5px;
         }
         
         button:hover {
             background-color: #45a049;
         }
         
-        #message-container {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 10px 20px;
-            border-radius: 5px;
-            display: none;
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
         }
     </style>
 </head>
 <body>
-    <div id="pdf-container"></div>
-    <div id="message-container"></div>
-    
-    <script src="pdf-viewer.js"></script>
-    <script>
-        // Listen for text extraction events
-        document.addEventListener('pdf-text-extracted', (e) => {
-            // No message display, just log to console
-            console.log('Text extracted:', e.detail.text.substring(0, 50) + '...');
+    <div class="controls">
+        <div style="display: flex; align-items: center; width: 100%;">
+            <button id="prev-page" disabled>Previous</button>
+            <span id="page-info" style="margin: 0 10px;">Page 1 of 1</span>
+            <button id="next-page" disabled>Next</button>
             
-            // Send message to parent window if in iframe
-            if (window.parent !== window) {
-                window.parent.postMessage({
-                    type: 'pdf-text-extracted',
-                    text: e.detail.text
-                }, '*');
+            <button id="zoom-out" style="margin-left: 20px;">-</button>
+            <button id="zoom-in">+</button>
+            
+            <div class="copy-paste-label" style="margin-left: 20px;">Copy & Paste Mode</div>
+            <button id="clear-clipboard" style="margin-left: 10px; background-color: #f44336;">Clear Clipboard</button>
+            
+            <div style="margin-left: auto; display: flex; align-items: center;">
+                <input type="text" id="pdf-url-input" placeholder="Enter PDF URL" 
+                       style="padding: 5px; margin-right: 5px; width: 250px; border: 1px solid #ccc; border-radius: 4px;">
+                <button id="load-pdf-button">Load</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="instructions" id="instructions">
+        Copy & Paste Mode: Select text, copy (Ctrl+C), and paste (Ctrl+V)
+    </div>
+    
+    <div id="pdf-container">
+        <div id="pdf-viewer"></div>
+    </div>
+    
+    <script>
+        // The workerSrc property needs to be specified
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        // PDF viewer variables
+        let pdfDoc = null;
+        let pageNum = 1;
+        let pageRendering = false;
+        let pageNumPending = null;
+        let scale = 1.0;
+        let canvas = null;
+        let ctx = null;
+        let textLayer = null;
+        
+        // Auto-hide the instructions after 10 seconds
+        setTimeout(() => {
+            const instructions = document.getElementById('instructions');
+            instructions.style.opacity = '0';
+            setTimeout(() => {
+                instructions.style.display = 'none';
+            }, 1000);
+        }, 10000);
+        
+        // Initialize the viewer
+        function initViewer() {
+            // Create canvas
+            canvas = document.createElement('canvas');
+            ctx = canvas.getContext('2d');
+            
+            // Create text layer for selection
+            textLayer = document.createElement('div');
+            textLayer.className = 'textLayer';
+            textLayer.style.userSelect = 'text';
+            textLayer.style.webkitUserSelect = 'text';
+            textLayer.style.mozUserSelect = 'text';
+            textLayer.style.msUserSelect = 'text';
+            textLayer.style.cursor = 'text';
+            
+            // Create a wrapper div
+            const wrapper = document.createElement('div');
+            wrapper.style.position = 'relative';
+            wrapper.appendChild(canvas);
+            wrapper.appendChild(textLayer);
+            
+            // Add to the viewer
+            document.getElementById('pdf-viewer').appendChild(wrapper);
+            
+            // Set up button event listeners
+            document.getElementById('prev-page').addEventListener('click', onPrevPage);
+            document.getElementById('next-page').addEventListener('click', onNextPage);
+            document.getElementById('zoom-in').addEventListener('click', onZoomIn);
+            document.getElementById('zoom-out').addEventListener('click', onZoomOut);
+        }
+        
+        // Render a specific page
+        function renderPage(num) {
+            pageRendering = true;
+            
+            // Get page
+            pdfDoc.getPage(num).then(page => {
+                // Adjust canvas size to page size with scale
+                const viewport = page.getViewport({ scale: scale });
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                
+                // Render PDF page into canvas context
+                const renderContext = {
+                    canvasContext: ctx,
+                    viewport: viewport
+                };
+                
+                // Clear text layer
+                textLayer.innerHTML = '';
+                textLayer.style.width = `${viewport.width}px`;
+                textLayer.style.height = `${viewport.height}px`;
+                
+                const renderTask = page.render(renderContext);
+                
+                // Get the text content of the page
+                page.getTextContent().then(textContent => {
+                    // Create text layer
+                    pdfjsLib.renderTextLayer({
+                        textContent: textContent,
+                        container: textLayer,
+                        viewport: viewport,
+                        textDivs: []
+                    });
+                });
+                
+                // Wait for rendering to finish
+                renderTask.promise.then(() => {
+                    pageRendering = false;
+                    
+                    if (pageNumPending !== null) {
+                        // New page rendering is pending
+                        renderPage(pageNumPending);
+                        pageNumPending = null;
+                    }
+                });
+            });
+            
+            // Update page info
+            document.getElementById('page-info').textContent = `Page ${num} of ${pdfDoc.numPages}`;
+            
+            // Update button states
+            document.getElementById('prev-page').disabled = num <= 1;
+            document.getElementById('next-page').disabled = num >= pdfDoc.numPages;
+        }
+        
+        // Queue rendering of a page
+        function queueRenderPage(num) {
+            if (pageRendering) {
+                pageNumPending = num;
+            } else {
+                renderPage(num);
             }
+        }
+        
+        // Go to previous page
+        function onPrevPage() {
+            if (pageNum <= 1) {
+                return;
+            }
+            pageNum--;
+            queueRenderPage(pageNum);
+        }
+        
+        // Go to next page
+        function onNextPage() {
+            if (pageNum >= pdfDoc.numPages) {
+                return;
+            }
+            pageNum++;
+            queueRenderPage(pageNum);
+        }
+        
+        // Zoom in
+        function onZoomIn() {
+            scale += 0.25;
+            queueRenderPage(pageNum);
+        }
+        
+        // Zoom out
+        function onZoomOut() {
+            if (scale <= 0.5) {
+                return;
+            }
+            scale -= 0.25;
+            queueRenderPage(pageNum);
+        }
+        
+        // Load a PDF from URL
+        function loadPDF(url) {
+            // Using promise to fetch the PDF
+            const loadingTask = pdfjsLib.getDocument(url);
+            loadingTask.promise.then(pdf => {
+                pdfDoc = pdf;
+                document.getElementById('page-info').textContent = `Page ${pageNum} of ${pdfDoc.numPages}`;
+                
+                // Enable navigation buttons
+                document.getElementById('prev-page').disabled = pageNum <= 1;
+                document.getElementById('next-page').disabled = pageNum >= pdfDoc.numPages;
+                
+                // Initial render
+                renderPage(pageNum);
+                
+                console.log('PDF loaded successfully');
+            }).catch(error => {
+                console.error('Error loading PDF:', error);
+                document.getElementById('pdf-viewer').innerHTML = `<p>Error loading PDF: ${error.message}</p>`;
+            });
+        }
+        
+        // Initialize the viewer
+        initViewer();
+        
+        // Get PDF URL from query parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const pdfUrl = urlParams.get('url');
+        
+        if (pdfUrl) {
+            // Set the URL input value
+            document.getElementById('pdf-url-input').value = pdfUrl;
+            
+            // Load the PDF
+            loadPDF(pdfUrl);
+        } else {
+            console.error('No PDF URL provided');
+            document.getElementById('pdf-viewer').innerHTML = '<p>Error: No PDF URL provided. Use ?url=path/to/pdf.pdf in the URL.</p>';
+        }
+        
+        // Listen for copy events to capture selected text
+        document.addEventListener('copy', (e) => {
+            // Wait a moment for the clipboard to be populated
+            setTimeout(() => {
+                // Try to get the text from the clipboard
+                navigator.clipboard.readText().then(text => {
+                    if (text && text.trim().length > 0) {
+                        console.log('Text copied to clipboard:', text.substring(0, 50) + '...');
+                        
+                        // Send the copied text to the parent window
+                        if (window.parent !== window) {
+                            window.parent.postMessage({
+                                type: 'pdf-text-extracted',
+                                text: text
+                            }, '*');
+                        }
+                        
+                        // Also dispatch a custom event
+                        const event = new CustomEvent('pdf-text-extracted', {
+                            detail: { text: text }
+                        });
+                        document.dispatchEvent(event);
+                    }
+                }).catch(err => {
+                    console.error('Failed to read clipboard contents:', err);
+                });
+            }, 100);
+        });
+        
+        // Add event listener for the load button
+        document.getElementById('load-pdf-button').addEventListener('click', () => {
+            const urlInput = document.getElementById('pdf-url-input');
+            const url = urlInput.value.trim();
+            
+            if (url) {
+                // Load the PDF
+                loadPDF(url);
+                console.log('Loading PDF from URL:', url);
+                
+                // Update the URL parameter (optional)
+                const newUrl = new URL(window.location.href);
+                newUrl.searchParams.set('url', url);
+                window.history.replaceState({}, '', newUrl.toString());
+            } else {
+                console.error('Please enter a PDF URL');
+                alert('Please enter a PDF URL');
+            }
+        });
+        
+        // Add event listener for Enter key in the URL input
+        document.getElementById('pdf-url-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                // Prevent the default form submission
+                e.preventDefault();
+                
+                // Trigger the load button click
+                document.getElementById('load-pdf-button').click();
+            }
+        });
+        
+        // Add event listener for the clear clipboard button
+        document.getElementById('clear-clipboard').addEventListener('click', () => {
+            // Try to clear the clipboard by writing an empty string
+            navigator.clipboard.writeText('').then(() => {
+                console.log('Clipboard cleared');
+                
+                // Show a notification
+                const notification = document.createElement('div');
+                notification.style.position = 'fixed';
+                notification.style.bottom = '20px';
+                notification.style.left = '50%';
+                notification.style.transform = 'translateX(-50%)';
+                notification.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+                notification.style.color = 'white';
+                notification.style.padding = '10px 15px';
+                notification.style.borderRadius = '5px';
+                notification.style.zIndex = '1000';
+                notification.textContent = 'Clipboard cleared';
+                
+                document.body.appendChild(notification);
+                
+                // Remove the notification after 2 seconds
+                setTimeout(() => {
+                    document.body.removeChild(notification);
+                }, 2000);
+                
+                // Also notify the parent window
+                if (window.parent !== window) {
+                    window.parent.postMessage({
+                        type: 'clipboard-cleared'
+                    }, '*');
+                }
+            }).catch(err => {
+                console.error('Failed to clear clipboard:', err);
+                alert('Failed to clear clipboard. Please try again.');
+            });
         });
         
         // Listen for messages from parent window
         window.addEventListener('message', (event) => {
             if (event.data && event.data.type === 'load-pdf') {
-                if (event.data.url && window.pdfViewer) {
-                    window.pdfViewer.loadPDF(event.data.url);
+                if (event.data.url) {
+                    // Update the URL input field
+                    document.getElementById('pdf-url-input').value = event.data.url;
+                    
+                    // Load the PDF
+                    loadPDF(event.data.url);
                 }
             }
         });

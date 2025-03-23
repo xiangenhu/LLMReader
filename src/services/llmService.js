@@ -248,22 +248,22 @@ exports.processChat = async (message, conversation, model, provider, sessionId =
     }
   }
   
-  // Add system message with preferences if any are specified
-  let systemMessage = 'You are a helpful assistant.';
+  // Get system message from environment or use default
+  let systemMessage = process.env.SYSTEM_MESSAGE || 'You are a helpful assistant.';
   
+  // Add preferences to the system message if specified
   if (readingLevel !== 'original' || language !== 'original' || style !== 'original') {
-    systemMessage = 'You are a helpful assistant. ';
-    
+    // Don't overwrite the original system message, just append to it
     if (readingLevel !== 'original') {
-      systemMessage += `Please respond at a ${readingLevel} reading level. `;
+      systemMessage += ` Please respond at a ${readingLevel} reading level.`;
     }
     
     if (language !== 'original') {
-      systemMessage += `Please respond in ${language}. `;
+      systemMessage += ` Please respond in ${language}.`;
     }
     
     if (style !== 'original') {
-      systemMessage += `Please use a ${style} writing style. `;
+      systemMessage += ` Please use a ${style} writing style.`;
     }
   }
   
@@ -499,12 +499,15 @@ ${text}`;
  */
 async function callOpenAI(prompt, model, stream = false, onChunk = null) {
   try {
+    // Get system message from environment or use default
+    const systemMessage = process.env.SYSTEM_MESSAGE || 'You are a helpful assistant that rewrites text based on user preferences.';
+    
     const requestBody = {
       model: model,
       messages: [
         {
           role: 'system',
-          content: 'You are a helpful assistant that rewrites text based on user preferences.'
+          content: systemMessage
         },
         {
           role: 'user',
@@ -1279,12 +1282,15 @@ async function callDeepseek(prompt, model = 'deepseek-chat', stream = false, onC
     
     const deepseekModel = modelMap[model] || model;
     
+    // Get system message from environment or use default
+    const systemMessage = process.env.SYSTEM_MESSAGE || 'You are a helpful assistant that rewrites text based on user preferences.';
+    
     const requestBody = {
       model: deepseekModel,
       messages: [
         {
           role: 'system',
-          content: 'You are a helpful assistant that rewrites text based on user preferences.'
+          content: systemMessage
         },
         {
           role: 'user',
