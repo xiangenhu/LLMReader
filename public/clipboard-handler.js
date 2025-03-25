@@ -172,6 +172,24 @@ class ClipboardHandler {
         }, 3000);
     }
     
+    // Clear clipboard contents
+    clearClipboard() {
+        console.log('Clearing clipboard');
+        
+        // Try to clear clipboard using the Clipboard API if available
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText('')
+                .then(() => {
+                    console.log('Clipboard cleared successfully');
+                })
+                .catch(err => {
+                    console.error('Failed to clear clipboard:', err);
+                });
+        } else {
+            console.log('Clipboard API not available, cannot clear clipboard');
+        }
+    }
+    
     // Process text from clipboard
     processClipboardText(text) {
         if (!text || text.trim().length === 0) {
@@ -198,6 +216,9 @@ class ClipboardHandler {
             // If llmHandler is not available, try to process directly
             this.reader.processExtractedText();
         }
+        
+        // Clear clipboard to prevent processing the same text twice
+        this.clearClipboard();
         
         // Set up the Learning button to send text to the assessment URL
         $('#learning-button').off('click').on('click', () => {

@@ -248,8 +248,8 @@ exports.processChat = async (message, conversation, model, provider, sessionId =
     }
   }
   
-  // Get system message from environment or use default
-  let systemMessage = process.env.SYSTEM_MESSAGE || 'You are a helpful assistant.';
+  // Get system message based on context or use default
+  let systemMessage = process.env.SYSTEM_MESSAGE_CHAT || 'You are a helpful assistant.';
   
   // Add preferences to the system message if specified
   if (readingLevel !== 'original' || language !== 'original' || style !== 'original') {
@@ -499,8 +499,23 @@ ${text}`;
  */
 async function callOpenAI(prompt, model, stream = false, onChunk = null) {
   try {
-    // Get system message from environment or use default
-    const systemMessage = process.env.SYSTEM_MESSAGE || 'You are a helpful assistant that rewrites text based on user preferences.';
+    // Determine the context from the prompt content (PDF, HTML, or default)
+    let context = 'default';
+    if (prompt.includes('PDF') || prompt.includes('pdf document')) {
+      context = 'pdf';
+    } else if (prompt.includes('HTML') || prompt.includes('web page') || prompt.includes('webpage')) {
+      context = 'html';
+    }
+    
+    // Get system message based on context or use default
+    let systemMessage;
+    if (context === 'pdf') {
+      systemMessage = process.env.SYSTEM_MESSAGE_PDF || 'You are a helpful assistant that specializes in explaining PDF documents.';
+    } else if (context === 'html') {
+      systemMessage = process.env.SYSTEM_MESSAGE_HTML || 'You are a helpful assistant that specializes in processing web content.';
+    } else {
+      systemMessage = process.env.SYSTEM_MESSAGE_CHAT || 'You are a helpful assistant that rewrites text based on user preferences.';
+    }
     
     const requestBody = {
       model: model,
@@ -1282,8 +1297,23 @@ async function callDeepseek(prompt, model = 'deepseek-chat', stream = false, onC
     
     const deepseekModel = modelMap[model] || model;
     
-    // Get system message from environment or use default
-    const systemMessage = process.env.SYSTEM_MESSAGE || 'You are a helpful assistant that rewrites text based on user preferences.';
+    // Determine the context from the prompt content (PDF, HTML, or default)
+    let context = 'default';
+    if (prompt.includes('PDF') || prompt.includes('pdf document')) {
+      context = 'pdf';
+    } else if (prompt.includes('HTML') || prompt.includes('web page') || prompt.includes('webpage')) {
+      context = 'html';
+    }
+    
+    // Get system message based on context or use default
+    let systemMessage;
+    if (context === 'pdf') {
+      systemMessage = process.env.SYSTEM_MESSAGE_PDF || 'You are a helpful assistant that specializes in explaining PDF documents.';
+    } else if (context === 'html') {
+      systemMessage = process.env.SYSTEM_MESSAGE_HTML || 'You are a helpful assistant that specializes in processing web content.';
+    } else {
+      systemMessage = process.env.SYSTEM_MESSAGE_CHAT || 'You are a helpful assistant that rewrites text based on user preferences.';
+    }
     
     const requestBody = {
       model: deepseekModel,

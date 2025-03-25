@@ -127,7 +127,9 @@ class LLMHandler {
                             readingLevel: readingLevel,
                             language: language,
                             style: style,
-                            model: model
+                            model: model,
+                            originalText: text,
+                            processedText: fullResponse
                         });
                         
                         // Update processed count

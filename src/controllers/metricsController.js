@@ -27,16 +27,24 @@ exports.trackMetrics = async (req, res) => {
       verb: {
         id: data.action === 'processed' 
           ? 'http://adlnet.gov/expapi/verbs/completed'
-          : 'http://adlnet.gov/expapi/verbs/experienced',
+          : data.action === 'chat_interaction'
+            ? 'http://adlnet.gov/expapi/verbs/interacted'
+            : 'http://adlnet.gov/expapi/verbs/experienced',
         display: {
-          'en-US': data.action === 'processed' ? 'processed' : 'assessed'
+          'en-US': data.action === 'processed' 
+            ? 'processed' 
+            : data.action === 'chat_interaction'
+              ? 'chatted'
+              : 'assessed'
         }
       },
       object: {
-        id: `http://example.com/llmreader/paragraph/${data.paragraphId}`,
+        id: `http://example.com/llmreader/${data.action === 'chat_interaction' ? 'chat' : 'paragraph'}/${data.paragraphId}`,
         definition: {
           name: {
-            'en-US': `Paragraph ${data.paragraphId}`
+            'en-US': data.action === 'chat_interaction' 
+              ? `Chat Session ${data.paragraphId}` 
+              : `Paragraph ${data.paragraphId}`
           }
         }
       },
@@ -54,6 +62,13 @@ exports.trackMetrics = async (req, res) => {
             model: data.model,
             timestamp: new Date().toISOString()
           }
+        }
+      },
+      context: {
+        extensions: {
+          'http://example.com/llmreader/prompt': data.originalText || data.message || '',
+          'http://example.com/llmreader/response': data.processedText || data.assistantResponse || '',
+          ...(data.conversationHistory ? { 'http://example.com/llmreader/conversation': data.conversationHistory } : {})
         }
       },
       timestamp: new Date().toISOString()

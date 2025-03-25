@@ -296,6 +296,35 @@ class LLMChat {
         $('#prompt-tokens').text(parseInt($('#prompt-tokens').text()) + (metrics.promptTokens || 0));
         $('#completion-tokens').text(parseInt($('#completion-tokens').text()) + (metrics.completionTokens || 0));
         $('#total-tokens').text(parseInt($('#total-tokens').text()) + (metrics.totalTokens || 0));
+        
+        // Send metrics and conversation history to server for LRS tracking
+        if ($('#track-metrics').is(':checked')) {
+            $.ajax({
+                url: '/api/metrics',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    action: 'chat_interaction',
+                    paragraphId: `chat-${Date.now()}`,
+                    promptTokens: metrics.promptTokens || 0,
+                    completionTokens: metrics.completionTokens || 0,
+                    totalTokens: metrics.totalTokens || 0,
+                    model: $('#model').val(),
+                    readingLevel: $('#reading-level').length ? $('#reading-level').val() : 'original',
+                    language: $('#language').length ? $('#language').val() : 'original',
+                    style: $('#style').length ? $('#style').val() : 'original',
+                    conversationHistory: this.messages,
+                    message: this.messages[this.messages.length - 2]?.content || '',
+                    assistantResponse: this.messages[this.messages.length - 1]?.content || ''
+                }),
+                success: function(data) {
+                    console.log('Chat metrics sent to server:', data);
+                },
+                error: function(error) {
+                    console.error('Error sending chat metrics to server:', error);
+                }
+            });
+        }
     }
     
     clearChat() {

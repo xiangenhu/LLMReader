@@ -39,6 +39,17 @@ class PDFHandler {
                 // Show the processing overlay
                 $('#processing-overlay').css('display', 'flex');
                 
+                // Clear clipboard to prevent processing the same text twice
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText('')
+                        .then(() => {
+                            console.log('Clipboard cleared after PDF text extraction');
+                        })
+                        .catch(err => {
+                            console.error('Failed to clear clipboard:', err);
+                        });
+                }
+                
                 // Always process the text automatically
                 this.reader.llmHandler.processExtractedText(event.data.text);
                 
@@ -271,6 +282,17 @@ class PDFHandler {
             
             // Show the processing overlay
             $('#processing-overlay').css('display', 'flex');
+            
+            // Clear clipboard to prevent processing the same text twice
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText('')
+                    .then(() => {
+                        console.log('Clipboard cleared after PDF text extraction');
+                    })
+                    .catch(err => {
+                        console.error('Failed to clear clipboard:', err);
+                    });
+            }
             
             // Always process the text automatically
             this.reader.llmHandler.processExtractedText(text);
