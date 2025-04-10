@@ -35,7 +35,9 @@ exports.processText = async (req, res) => {
       promptTokens: result.metrics.promptTokens,
       completionTokens: result.metrics.completionTokens,
       totalTokens: result.metrics.totalTokens,
-      interPromptLatency: result.metrics.interPromptLatency
+      interPromptLatency: result.metrics.interPromptLatency,
+      originalText: text,
+      processedText: result.processedText
     });
   } catch (error) {
     console.error('Error in processText controller:', error.message);
@@ -89,7 +91,9 @@ exports.processTextStream = async (requestData, res) => {
       promptTokens: result.metrics.promptTokens,
       completionTokens: result.metrics.completionTokens,
       totalTokens: result.metrics.totalTokens,
-      interPromptLatency: result.metrics.interPromptLatency
+      interPromptLatency: result.metrics.interPromptLatency,
+      originalText: text,
+      processedText: fullText
     })}\n\n`);
     
     // End the response
@@ -141,7 +145,9 @@ exports.processChat = async (req, res) => {
       promptTokens: result.metrics.promptTokens,
       completionTokens: result.metrics.completionTokens,
       totalTokens: result.metrics.totalTokens,
-      interPromptLatency: result.metrics.interPromptLatency
+      interPromptLatency: result.metrics.interPromptLatency,
+      userMessage: message,
+      assistantResponse: result.message
     });
   } catch (error) {
     console.error('Error in processChat controller:', error.message);
@@ -201,7 +207,9 @@ exports.processChatStream = async (requestData, res) => {
       promptTokens: result.metrics.promptTokens,
       completionTokens: result.metrics.completionTokens,
       totalTokens: result.metrics.totalTokens,
-      interPromptLatency: result.metrics.interPromptLatency
+      interPromptLatency: result.metrics.interPromptLatency,
+      message: message,
+      assistantResponse: fullText
     })}\n\n`);
     
     // End the response
@@ -242,7 +250,9 @@ exports.assessText = async (req, res) => {
       promptTokens: result.metrics.promptTokens,
       completionTokens: result.metrics.completionTokens,
       totalTokens: result.metrics.totalTokens,
-      interPromptLatency: result.metrics.interPromptLatency
+      interPromptLatency: result.metrics.interPromptLatency,
+      originalText: text,
+      assessmentText: result.assessment
     });
   } catch (error) {
     console.error('Error in assessText controller:', error.message);

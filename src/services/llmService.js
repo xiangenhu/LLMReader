@@ -507,6 +507,76 @@ async function callOpenAI(prompt, model, stream = false, onChunk = null) {
       context = 'html';
     }
     
+    // Extract language preference from the prompt
+    let languagePreference = 'English';
+    if (prompt.includes('in Chinese')) {
+      languagePreference = 'Chinese';
+    } else if (prompt.includes('in Spanish')) {
+      languagePreference = 'Spanish';
+    } else if (prompt.includes('in French')) {
+      languagePreference = 'French';
+    } else if (prompt.includes('in German')) {
+      languagePreference = 'German';
+    } else if (prompt.includes('in Japanese')) {
+      languagePreference = 'Japanese';
+    } else if (prompt.includes('in Korean')) {
+      languagePreference = 'Korean';
+    } else if (prompt.includes('in Russian')) {
+      languagePreference = 'Russian';
+    } else if (prompt.includes('in Italian')) {
+      languagePreference = 'Italian';
+    } else if (prompt.includes('in Portuguese')) {
+      languagePreference = 'Portuguese';
+    } else if (prompt.includes('in Arabic')) {
+      languagePreference = 'Arabic';
+    } else if (prompt.includes('in Hindi')) {
+      languagePreference = 'Hindi';
+    } else if (prompt.includes('in Bengali')) {
+      languagePreference = 'Bengali';
+    } else if (prompt.includes('in Dutch')) {
+      languagePreference = 'Dutch';
+    } else if (prompt.includes('in Turkish')) {
+      languagePreference = 'Turkish';
+    } else if (prompt.includes('in Polish')) {
+      languagePreference = 'Polish';
+    } else if (prompt.includes('in Swedish')) {
+      languagePreference = 'Swedish';
+    } else if (prompt.includes('in Norwegian')) {
+      languagePreference = 'Norwegian';
+    } else if (prompt.includes('in Danish')) {
+      languagePreference = 'Danish';
+    } else if (prompt.includes('in Finnish')) {
+      languagePreference = 'Finnish';
+    } else if (prompt.includes('in Greek')) {
+      languagePreference = 'Greek';
+    } else if (prompt.includes('in Czech')) {
+      languagePreference = 'Czech';
+    } else if (prompt.includes('in Hungarian')) {
+      languagePreference = 'Hungarian';
+    } else if (prompt.includes('in Romanian')) {
+      languagePreference = 'Romanian';
+    } else if (prompt.includes('in Bulgarian')) {
+      languagePreference = 'Bulgarian';
+    } else if (prompt.includes('in Ukrainian')) {
+      languagePreference = 'Ukrainian';
+    } else if (prompt.includes('in Thai')) {
+      languagePreference = 'Thai';
+    } else if (prompt.includes('in Vietnamese')) {
+      languagePreference = 'Vietnamese';
+    } else if (prompt.includes('in Indonesian')) {
+      languagePreference = 'Indonesian';
+    } else if (prompt.includes('in Malay')) {
+      languagePreference = 'Malay';
+    } else if (prompt.includes('in Tagalog')) {
+      languagePreference = 'Tagalog';
+    } else if (prompt.includes('in Persian')) {
+      languagePreference = 'Persian';
+    } else if (prompt.includes('in Hebrew')) {
+      languagePreference = 'Hebrew';
+    } else if (prompt.includes('in Urdu')) {
+      languagePreference = 'Urdu';
+    }
+    
     // Get system message based on context or use default
     let systemMessage;
     if (context === 'pdf') {
@@ -515,6 +585,11 @@ async function callOpenAI(prompt, model, stream = false, onChunk = null) {
       systemMessage = process.env.SYSTEM_MESSAGE_HTML || 'You are a helpful assistant that specializes in processing web content.';
     } else {
       systemMessage = process.env.SYSTEM_MESSAGE_CHAT || 'You are a helpful assistant that rewrites text based on user preferences.';
+    }
+    
+    // Add language preference to system message
+    if (languagePreference !== 'English') {
+      systemMessage += ` Please respond in ${languagePreference}.`;
     }
     
     const requestBody = {
@@ -1305,6 +1380,76 @@ async function callDeepseek(prompt, model = 'deepseek-chat', stream = false, onC
       context = 'html';
     }
     
+    // Extract language preference from the prompt
+    let languagePreference = 'English';
+    if (prompt.includes('in Chinese')) {
+      languagePreference = 'Chinese';
+    } else if (prompt.includes('in Spanish')) {
+      languagePreference = 'Spanish';
+    } else if (prompt.includes('in French')) {
+      languagePreference = 'French';
+    } else if (prompt.includes('in German')) {
+      languagePreference = 'German';
+    } else if (prompt.includes('in Japanese')) {
+      languagePreference = 'Japanese';
+    } else if (prompt.includes('in Korean')) {
+      languagePreference = 'Korean';
+    } else if (prompt.includes('in Russian')) {
+      languagePreference = 'Russian';
+    } else if (prompt.includes('in Italian')) {
+      languagePreference = 'Italian';
+    } else if (prompt.includes('in Portuguese')) {
+      languagePreference = 'Portuguese';
+    } else if (prompt.includes('in Arabic')) {
+      languagePreference = 'Arabic';
+    } else if (prompt.includes('in Hindi')) {
+      languagePreference = 'Hindi';
+    } else if (prompt.includes('in Bengali')) {
+      languagePreference = 'Bengali';
+    } else if (prompt.includes('in Dutch')) {
+      languagePreference = 'Dutch';
+    } else if (prompt.includes('in Turkish')) {
+      languagePreference = 'Turkish';
+    } else if (prompt.includes('in Polish')) {
+      languagePreference = 'Polish';
+    } else if (prompt.includes('in Swedish')) {
+      languagePreference = 'Swedish';
+    } else if (prompt.includes('in Norwegian')) {
+      languagePreference = 'Norwegian';
+    } else if (prompt.includes('in Danish')) {
+      languagePreference = 'Danish';
+    } else if (prompt.includes('in Finnish')) {
+      languagePreference = 'Finnish';
+    } else if (prompt.includes('in Greek')) {
+      languagePreference = 'Greek';
+    } else if (prompt.includes('in Czech')) {
+      languagePreference = 'Czech';
+    } else if (prompt.includes('in Hungarian')) {
+      languagePreference = 'Hungarian';
+    } else if (prompt.includes('in Romanian')) {
+      languagePreference = 'Romanian';
+    } else if (prompt.includes('in Bulgarian')) {
+      languagePreference = 'Bulgarian';
+    } else if (prompt.includes('in Ukrainian')) {
+      languagePreference = 'Ukrainian';
+    } else if (prompt.includes('in Thai')) {
+      languagePreference = 'Thai';
+    } else if (prompt.includes('in Vietnamese')) {
+      languagePreference = 'Vietnamese';
+    } else if (prompt.includes('in Indonesian')) {
+      languagePreference = 'Indonesian';
+    } else if (prompt.includes('in Malay')) {
+      languagePreference = 'Malay';
+    } else if (prompt.includes('in Tagalog')) {
+      languagePreference = 'Tagalog';
+    } else if (prompt.includes('in Persian')) {
+      languagePreference = 'Persian';
+    } else if (prompt.includes('in Hebrew')) {
+      languagePreference = 'Hebrew';
+    } else if (prompt.includes('in Urdu')) {
+      languagePreference = 'Urdu';
+    }
+    
     // Get system message based on context or use default
     let systemMessage;
     if (context === 'pdf') {
@@ -1313,6 +1458,11 @@ async function callDeepseek(prompt, model = 'deepseek-chat', stream = false, onC
       systemMessage = process.env.SYSTEM_MESSAGE_HTML || 'You are a helpful assistant that specializes in processing web content.';
     } else {
       systemMessage = process.env.SYSTEM_MESSAGE_CHAT || 'You are a helpful assistant that rewrites text based on user preferences.';
+    }
+    
+    // Add language preference to system message
+    if (languagePreference !== 'English') {
+      systemMessage += ` Please respond in ${languagePreference}.`;
     }
     
     const requestBody = {
